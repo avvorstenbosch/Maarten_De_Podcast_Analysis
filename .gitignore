@@ -133,3 +133,6 @@ dmypy.json
 *.srt
 *.txt
 *.vtt
+
+# ignore dependencies directory
+dependencies/
