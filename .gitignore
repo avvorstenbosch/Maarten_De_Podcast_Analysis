@@ -139,3 +139,6 @@ dependencies/
 
 # ignore intermediate outputs
 text_analysis/*.html
+
+# ignore pickle data
+*.pickle
