@@ -136,3 +136,6 @@ dmypy.json
 
 # ignore dependencies directory
 dependencies/
+
+# ignore intermediate outputs
+text_analysis/*.html
