@@ -1,0 +1,198 @@
+---
+title: "Maarten van Rossem - De Podcast - #3xx Tekstanalyse van de podcast"
+author: "Alex van Vorstenbosch"
+date: today
+number-sections: true
+highlight-style: arrow
+format:
+  html:
+    toc: true
+    toc-title: Table of Contents
+    number-sections: true
+    colorlinks: true
+    theme:
+      light: flatly
+      dark: darkly
+    embed-resources: true
+jupyter: maarten
+---
+
+```{python}
+# base
+import os
+import re
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+plt.style.use('seaborn-darkgrid')
+# Fitting distributions
+from scipy.stats import gamma
+# Simple text processing
+from nltk.corpus import stopwords
+from nltk.tokenize import RegexpTokenizer
+# complex text processing
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.decomposition import NMF, MiniBatchNMF, LatentDirichletAllocation 
+#Making Wordclouds
+from wordcloud import WordCloud
+```
+
+```{python}
+def read_file(path):
+    with open(path, "r") as f:
+        text = f.read()
+    return text
+```
+
+```{python}
+path = "../data/text (copy)"
+files = [file for file in os.listdir(path) if file.endswith(".txt")]
+corpus = [read_file(os.path.join(path, file)) for file in files]
+```
+
+# How many words are spoken per episode?
+```{python}
+tokenizer = RegexpTokenizer(r'\w+')
+
+def get_length(text):
+    tokens = tokenizer.tokenize(text)
+    return(len(tokens))
+```
+
+## All episodes
+```{python}
+def plot_lengths_distribution(corpus, title, bins=12):
+    lengths = [get_length(text) for text in corpus]
+    plt.figure(figsize=(8,5))
+    plt.hist(lengths, bins, edgecolor="#EAEAF2", linewidth=1)
+    plt.title(f"Length of Podcast in Words-Per-Episode - {title}")
+    plt.xlabel("# of Words")
+    plt.ylabel("Counts")
+    plt.tight_layout()
+    plt.show()
+```
+
+```{python}
+plot_lengths_distribution(corpus, title="All files", bins=12)
+```
+
+
+## Only the numbered episodes
+```{python}
+# Check if file is a numbered episode
+# We also skip the trailer as it is episode 0
+is_episode = [bool(re.search("#[1-9]\d+", file)) for file in files]
+
+# Select only numbered episodes
+files_eps = [file for is_eps, file in zip(is_episode, files) if is_eps]
+corpus_eps = [text for is_eps, text in zip(is_episode, corpus) if is_eps]
+```
+
+```{python}
+plot_lengths_distribution(corpus_eps, title="Numbered episodes", bins=12)
+```
+
+### Fitting a lognormal to this distribution
+```{python}
+def plot_lengths_distribution_lognormal(corpus, title, bins=10):
+    lengths = [get_length(text) for text in corpus]
+    plt.figure(figsize=(8,5))
+    plt.hist(lengths, bins, density=True, edgecolor="#EAEAF2", linewidth=1)
+
+    #fit the gamma
+    params = gamma.fit(lengths, floc=0)
+    x = np.linspace(0, max(lengths), 100)
+    gamma_fitted = gamma.pdf(x, *params)
+    plt.plot(x, gamma_fitted, color="r", label = "Gamma Distribution:\n"+r"  -$\alpha$="+f"{round(params[0],2)}\n  -loc={round(params[1],2)}\n  -scale={round(params[2],2)}")
+
+    plt.title(f"Length of Podcast in Words-Per-Episode  - {title}")
+    plt.xlabel("# of Words")
+    plt.ylabel("Counts")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+    return params
+params = plot_lengths_distribution_lognormal(corpus_eps, title="Fitted Lognormal", bins=12)
+```
+
+It is fun to see that the distribution of Words-Per-Episode fits a gamma-distribution so well. This distribution succesfully models other problems such as:
+
+* waiting times at a busstop
+* the severity of insurance claims
+* the load on webservers
+
+So now we can add to this list:
+
+* the words-per-episode for the 'Maarten van Rossum' podcast 
+
+For completeness, the best fit on this distribution gives:
+
+```{python}
+#| echo: false
+print(f"Mean = {round(params[0]*params[2],2)}")
+print(f"Standard deviation ={round(np.sqrt(params[0]*params[2]**2),2)}")
+```
+
+# Wordcloud of most common words
+Which words, excluding stopwords (de, het een, deze, die, zij, zijn, etc.). 
+## Including common stopwords
+```{python}
+full_text = " ".join(corpus_eps)
+# Generate a word cloud image
+wordcloud = WordCloud(width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1).generate(full_text)
+
+# Display the generated image:
+# the matplotlib way:
+plt.figure(figsize=(8,5))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis("off")
+plt.tight_layout()
+plt.show()
+```
+
+## Excluding common stopwords
+
+```{python}
+# Create stopword list:
+stopwords_path = "../dependencies/dutch_stopwords.txt"
+with open(stopwords_path, "r") as f:
+    dutch_stopwords = f.read().split("\n")
+dutch_stopwords = set(dutch_stopwords)
+```
+
+```{python}
+wordcloud = WordCloud(stopwords=dutch_stopwords, width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=300).generate(full_text)
+
+# Display the generated image:
+# the matplotlib way:
+plt.figure(figsize=(8,5))
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis("off")
+plt.tight_layout()
+plt.show()
+```
+
+This is great as a creative expression of the words, but let's also look at them in a table. Here we look at the top 200 words. We include up to tri-grams:
+
+```{python}
+def get_top_n_words(corpus, n=None):
+    """
+    List all words in the corpus that are used on average >= 1 time per episode
+    """
+    vec = CountVectorizer(ngram_range=(1,5), stop_words=dutch_stopwords).fit(corpus)
+    bag_of_words = vec.transform(corpus)
+    sum_words = bag_of_words.sum(axis=0) 
+    word_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
+    word_freq = sorted(word_freq, key = lambda x: x[1], reverse=True)[:n]
+    word_freq = pd.DataFrame(word_freq, columns=("Token", "Count"))
+    word_freq["Rate_per_Episode"] = round(word_freq["Count"]/len(corpus_eps),2)
+    word_freq = word_freq[word_freq["Rate_per_Episode"]>=1]
+    return word_freq
+```
+
+```{python}
+word_freq = get_top_n_words(corpus_eps)
+pd.set_option('display.max_rows', word_freq.shape[0]+1)
+word_freq
+```
+
