@@ -24,9 +24,11 @@ import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
 plt.style.use('seaborn-darkgrid')
 # Fitting distributions
-from scipy.stats import gamma
+from scipy.stats import gamma, lognorm
 # Simple text processing
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
@@ -39,15 +41,27 @@ from wordcloud import WordCloud
 
 ```{python}
 def read_file(path):
-    with open(path, "r") as f:
-        text = f.read()
-    return text
+    try:
+        with open(path, "r") as f:
+            text = f.read()
+        return text
+    except FileNotFoundError:
+        return np.nan
 ```
 
 ```{python}
-path = "../data/text (copy)"
-files = [file for file in os.listdir(path) if file.endswith(".txt")]
-corpus = [read_file(os.path.join(path, file)) for file in files]
+data = pd.read_pickle("../extract_data/data.pickle")
+```
+
+```{python}
+# Sort by episode number
+data = data.sort_values(["episode"]).reset_index(drop=True)
+
+# Read Corpus
+data["text"] = data["txt_path"].transform(lambda path: read_file(path))
+
+# Drop episodes that have not been transcribed yet
+data = data.dropna(subset=["text"]).reset_index(drop=True)
 ```
 
 # How many words are spoken per episode?
@@ -57,14 +71,16 @@ tokenizer = RegexpTokenizer(r'\w+')
 def get_length(text):
     tokens = tokenizer.tokenize(text)
     return(len(tokens))
+
+# Words-per-Episode
+data["WPE"] = data["text"].transform(lambda text: get_length(text))
 ```
 
 ## All episodes
 ```{python}
-def plot_lengths_distribution(corpus, title, bins=12):
-    lengths = [get_length(text) for text in corpus]
+def plot_lengths_distribution(data, title, bins=12):
     plt.figure(figsize=(8,5))
-    plt.hist(lengths, bins, edgecolor="#EAEAF2", linewidth=1)
+    plt.hist(data["WPE"], bins, edgecolor="#EAEAF2", linewidth=1)
     plt.title(f"Length of Podcast in Words-Per-Episode - {title}")
     plt.xlabel("# of Words")
     plt.ylabel("Counts")
@@ -73,73 +89,128 @@ def plot_lengths_distribution(corpus, title, bins=12):
 ```
 
 ```{python}
-plot_lengths_distribution(corpus, title="All files", bins=12)
+plot_lengths_distribution(data, title="All files", bins=12)
 ```
 
+```{python}
+data["duration-s"] = pd.to_timedelta(data["duration"]).dt.total_seconds()
+data["duration-m"] = data["duration-s"]/60.0
+
+def plot_wpe_over_time(data):
+    fig,ax = plt.subplots(figsize=(12,5))
+    plt.title("Words-per-Episode and Episode Duration")
+    ax.plot(data["date"], data["WPE"])
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Words_per_Episode (#)")
+    plt.xticks(rotation = 70)
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+
+    #second y-axis
+    ax2=ax.twinx()
+    ax2.plot(data["date"], data["duration-m"], color="orange")
+    ax2.set_ylabel("Episode Duration (minutes)")
+
+plot_wpe_over_time(data)
+```
 
 ## Only the numbered episodes
 ```{python}
 # Check if file is a numbered episode
 # We also skip the trailer as it is episode 0
-is_episode = [bool(re.search("#[1-9]\d+", file)) for file in files]
+data["is_episode"] = data["episode"].transform(lambda num: num > 0)
 
 # Select only numbered episodes
-files_eps = [file for is_eps, file in zip(is_episode, files) if is_eps]
-corpus_eps = [text for is_eps, text in zip(is_episode, corpus) if is_eps]
+data_eps = data[data["is_episode"]==True]
 ```
 
 ```{python}
-plot_lengths_distribution(corpus_eps, title="Numbered episodes", bins=12)
+plot_lengths_distribution(data_eps, title="Numbered episodes", bins=12)
 ```
 
-### Fitting a lognormal to this distribution
+### Fitting statistical distributions to the histogram
 ```{python}
-def plot_lengths_distribution_lognormal(corpus, title, bins=10):
-    lengths = [get_length(text) for text in corpus]
+def plot_lengths_distribution_stats(data, title, bins=10):
+    model_params = []
     plt.figure(figsize=(8,5))
-    plt.hist(lengths, bins, density=True, edgecolor="#EAEAF2", linewidth=1)
-
+    plt.hist(data["WPE"], bins, density=True, edgecolor="#EAEAF2", linewidth=1)
+    
+    #fit the lognormal
+    params = lognorm.fit(data["WPE"], floc=0)
+    model_params.append(params)
+    x = np.linspace(0, data["WPE"].max(), 100)
+    lognormal_fitted = lognorm.pdf(x, *params)
+    plt.plot(x, lognormal_fitted, color="g", label = "Lognormal Distribution:\n"+r"  -$s$="+f"{round(params[0],2)}\n  -loc={round(params[1],2)}\n  -scale={round(params[2],2)}")
+    
     #fit the gamma
-    params = gamma.fit(lengths, floc=0)
-    x = np.linspace(0, max(lengths), 100)
+    params = gamma.fit(data["WPE"], floc=0)
+    model_params.append(params)
+    x = np.linspace(0, data["WPE"].max(), 100)
     gamma_fitted = gamma.pdf(x, *params)
     plt.plot(x, gamma_fitted, color="r", label = "Gamma Distribution:\n"+r"  -$\alpha$="+f"{round(params[0],2)}\n  -loc={round(params[1],2)}\n  -scale={round(params[2],2)}")
 
     plt.title(f"Length of Podcast in Words-Per-Episode  - {title}")
     plt.xlabel("# of Words")
-    plt.ylabel("Counts")
+    plt.ylabel("Probability Density")
     plt.legend()
     plt.tight_layout()
     plt.show()
-    return params
-params = plot_lengths_distribution_lognormal(corpus_eps, title="Fitted Lognormal", bins=12)
+    return model_params
+
+model_params = plot_lengths_distribution_stats(data_eps, title="Fitted Lognormal and Gamma Distribution", bins=21)
 ```
 
-It is fun to see that the distribution of Words-Per-Episode fits a gamma-distribution so well. This distribution succesfully models other problems such as:
+It is fun to see that the distribution of Words-Per-Episode fits these statistical distributions so well. The Gamma distribution succesfully models other problems such as:
 
 * waiting times at a busstop
 * the severity of insurance claims
 * the load on webservers
 
-So now we can add to this list:
+The Lognormal distribution, which appears to have the best fit, occurs in problems such as:
 
+* A countries income distribution
+* The length of chess games
+* Particle size distributions in various contexts
+
+So now we can add to these lists:
 * the words-per-episode for the 'Maarten van Rossum' podcast 
 
-For completeness, the best fit on this distribution gives:
+If we look at the raw data, the mean and the standard deviation are given by:
+
+```{python}
+lengths = [get_length(text) for text in corpus]
+print(f"Mean = {round(np.mean(lengths),2)}")
+print(f"Standard deviation ={round(np.std(lengths),2)}")
+```
+
+The best fit on this distribution for the Lognormal distributions gives:
 
 ```{python}
 #| echo: false
+params = model_params[0]
+mu = np.log(params[2])
+sigma = params[0]
+print(f"Mean = {round(np.exp(mu+sigma**2/2),2)}")
+print(f"Standard deviation ={round(np.sqrt((np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)),2)}")
+```
+
+The best fit on this distribution for the Gamma distributions gives:
+
+```{python}
+#| echo: false
+params = model_params[1]
 print(f"Mean = {round(params[0]*params[2],2)}")
 print(f"Standard deviation ={round(np.sqrt(params[0]*params[2]**2),2)}")
 ```
 
 # Wordcloud of most common words
 Which words, excluding stopwords (de, het een, deze, die, zij, zijn, etc.). 
+
 ## Including common stopwords
 ```{python}
 full_text = " ".join(corpus_eps)
 # Generate a word cloud image
-wordcloud = WordCloud(width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1).generate(full_text)
+wordcloud = WordCloud(width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
 
 # Display the generated image:
 # the matplotlib way:
@@ -161,7 +232,7 @@ dutch_stopwords = set(dutch_stopwords)
 ```
 
 ```{python}
-wordcloud = WordCloud(stopwords=dutch_stopwords, width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=300).generate(full_text)
+wordcloud = WordCloud(stopwords=dutch_stopwords, width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
 
 # Display the generated image:
 # the matplotlib way:
@@ -172,7 +243,9 @@ plt.tight_layout()
 plt.show()
 ```
 
-This is great as a creative expression of the words, but let's also look at them in a table. Here we look at the top 200 words. We include up to tri-grams:
+This is great as a creative expression of the words, but let's also look at the most common words in a table.
+
+## Table of most common words
 
 ```{python}
 def get_top_n_words(corpus, n=None):
@@ -187,12 +260,24 @@ def get_top_n_words(corpus, n=None):
     word_freq = pd.DataFrame(word_freq, columns=("Token", "Count"))
     word_freq["Rate_per_Episode"] = round(word_freq["Count"]/len(corpus_eps),2)
     word_freq = word_freq[word_freq["Rate_per_Episode"]>=1]
-    return word_freq
+    return word_freq, bag_of_words, vec
 ```
 
 ```{python}
-word_freq = get_top_n_words(corpus_eps)
+word_freq, bag_of_words, vectorizer = get_top_n_words(corpus_eps)
 pd.set_option('display.max_rows', word_freq.shape[0]+1)
 word_freq
 ```
 
+Let's attempt to track the use of "Natuurlijk" across episodes
+```{python}
+target_word = "oekraïne"
+def plot_dist_target(target_word):
+    id = [idx for word, idx in vectorizer.vocabulary_.items() if word == target_word][0]
+    dist = bag_of_words[:,id].toarray().T[0]
+    plt.plot(episode_numbers[1:], dist)
+    plt.title(f"Mentions of the word: {target_word}")
+    plt.ylabel("Counts")
+    plt.xlabel("Episode number")
+plot_dist_target(target_word)
+```
