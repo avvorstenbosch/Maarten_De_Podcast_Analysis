@@ -142,3 +142,6 @@ text_analysis/*.html
 
 # ignore pickle data
 *.pickle
+
+# ignore cache data
+/text_analysis/cache
