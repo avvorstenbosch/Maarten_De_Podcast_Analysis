@@ -2,6 +2,8 @@
 title: "Maarten van Rossem - De Podcast - #3xx Tekstanalyse van de podcast"
 author: "Alex van Vorstenbosch"
 date: today
+abstract: "De 'Maarten van Rossem'-podcast is one of the most popular podcasts in The Netherlands, which has produced more than 300 episodes in the past 2 years. In this report, we produce some fun, and hopefully interesting, statistics about the podcast. This is done by collecting all the currently available podcasts from the web, and transcribing them using the newly available `Whisper` automated speech recognition model. My goal with this project is of course to have fun analysing the wise words of Maarten and Tom. (and of course to be mentioned in the podcast!)"
+abstract-title: "Analysing the Podcast"
 number-sections: true
 highlight-style: arrow
 format:
@@ -21,6 +23,7 @@ jupyter: maarten
 # base
 import os
 import re
+import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -40,13 +43,62 @@ from wordcloud import WordCloud
 ```
 
 ```{python}
-def read_file(path):
-    try:
-        with open(path, "r") as f:
-            text = f.read()
-        return text
-    except FileNotFoundError:
+def write_pickle(path, object):
+    """
+    Pickle and save an object.
+
+    Parameters
+    ----------
+    path : str
+        Path to pickled file
+    object : any
+        An object to pickle
+    """    
+    with open(path, 'wb') as f:
+        pickle.dump(object, f)
+
+def read_pickle(path):
+    """
+    Read and return a pickled object.
+
+    Parameters
+    ----------
+    path : str
+        Path to pickled file
+
+    Returns
+    -------
+    any
+        unpickled object(s)
+    """    
+    with open(path, 'rb') as f:
+        object = pickle.load(f)
+    return object
+```
+
+
+```{python}
+def read_txt_file(path):
+    """
+    read text file from path
+
+    Parameters
+    ----------
+    path : str
+        filepath
+
+    Returns
+    -------
+    text : str
+        contents of the file
+    """    
+
+    if not os.path.exists(path):
         return np.nan
+
+    with open(path, "r") as f:
+        text = f.read()
+    return text
 ```
 
 ```{python}
@@ -58,13 +110,21 @@ data = pd.read_pickle("../extract_data/data.pickle")
 data = data.sort_values(["episode"]).reset_index(drop=True)
 
 # Read Corpus
-data["text"] = data["txt_path"].transform(lambda path: read_file(path))
+data["text"] = data["txt_path"].transform(lambda path: read_txt_file(path))
 
 # Drop episodes that have not been transcribed yet
 data = data.dropna(subset=["text"]).reset_index(drop=True)
 ```
 
-# How many words are spoken per episode?
+# Some statistics about the podcast
+We begin our analysis with the most simple, but interesting nontheless, statistics about the podcast.
+
+::: {.callout-note collapse="true"}
+## Extra background on ...
+
+:::
+
+## How many words are spoken per episode?
 ```{python}
 tokenizer = RegexpTokenizer(r'\w+')
 
@@ -76,11 +136,23 @@ def get_length(text):
 data["WPE"] = data["text"].transform(lambda text: get_length(text))
 ```
 
-## All episodes
+### All episodes
 ```{python}
-def plot_lengths_distribution(data, title, bins=12):
-    plt.figure(figsize=(8,5))
-    plt.hist(data["WPE"], bins, edgecolor="#EAEAF2", linewidth=1)
+def plot_lengths_histogram(data, title, bins=12):
+    """
+    Plot the distribution of episode lenghts
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Information about the episodes.
+    title : str
+        Second part of the figure title.
+    bins : int, optional
+        Number of bins in the histogram, by default 12
+    """    
+    plt.figure(figsize=(8.5, 5.5))
+    plt.hist(data["WPE"], bins, edgecolor="#EAEAF2", linewidth=1, align="mid")
     plt.title(f"Length of Podcast in Words-Per-Episode - {title}")
     plt.xlabel("# of Words")
     plt.ylabel("Counts")
@@ -89,7 +161,7 @@ def plot_lengths_distribution(data, title, bins=12):
 ```
 
 ```{python}
-plot_lengths_distribution(data, title="All files", bins=12)
+plot_lengths_histogram(data, title="All files", bins=12)
 ```
 
 ```{python}
@@ -97,9 +169,17 @@ data["duration-s"] = pd.to_timedelta(data["duration"]).dt.total_seconds()
 data["duration-m"] = data["duration-s"]/60.0
 
 def plot_wpe_over_time(data):
-    fig,ax = plt.subplots(figsize=(12,5))
+    """
+    Plot Words per Episode together with duration.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Information about the episodes.
+    """    
+    fig,ax = plt.subplots(figsize=(8.5, 5.5))
     plt.title("Words-per-Episode and Episode Duration")
-    ax.plot(data["date"], data["WPE"])
+    ax.plot(data["date"], data["WPE"], label="Words-per-Episode")
     ax.set_xlabel("Date")
     ax.set_ylabel("Words_per_Episode (#)")
     plt.xticks(rotation = 70)
@@ -108,13 +188,14 @@ def plot_wpe_over_time(data):
 
     #second y-axis
     ax2=ax.twinx()
-    ax2.plot(data["date"], data["duration-m"], color="orange")
+    ax2.plot(data["date"], data["duration-m"], label="Duration", color="orange")
     ax2.set_ylabel("Episode Duration (minutes)")
+    plt.legend()
 
-plot_wpe_over_time(data)
+plot_wpe_over_time(data.sort_values(by=["date", "episode"]))
 ```
 
-## Only the numbered episodes
+### Only the numbered episodes
 ```{python}
 # Check if file is a numbered episode
 # We also skip the trailer as it is episode 0
@@ -125,14 +206,33 @@ data_eps = data[data["is_episode"]==True]
 ```
 
 ```{python}
-plot_lengths_distribution(data_eps, title="Numbered episodes", bins=12)
+plot_lengths_histogram(data_eps, title="Numbered episodes", bins=12)
 ```
 
-### Fitting statistical distributions to the histogram
+#### Fitting statistical distributions to the histogram
+
+We could see from the previous figure, that the structure of episodes has changed quite a bit over time. The early episodes were typically around an hour long, and in the summer of around 2021 this was brought back to around ~40 minutes. It is interesting to note that we can actually fit statistical distributions to the variation that we see, as we will do in the following figure:
 ```{python}
-def plot_lengths_distribution_stats(data, title, bins=10):
+def plot_lengths_histogram_fit(data, title, bins=12):
+    """
+    Plot a histogram of episode lengths fit statistical distributions.
+
+    Parameters
+    ----------
+    data : 
+        Information about the episodes.
+    title : str
+        Second part of the figure title.
+    bins : int, optional
+        Number of bins in the histogram, by default 12
+
+    Returns
+    -------
+    model_params : list
+        List with the fit parameters for the statistical models.
+    """    
     model_params = []
-    plt.figure(figsize=(8,5))
+    plt.figure(figsize=(8.5, 5.5))
     plt.hist(data["WPE"], bins, density=True, edgecolor="#EAEAF2", linewidth=1)
     
     #fit the lognormal
@@ -157,8 +257,14 @@ def plot_lengths_distribution_stats(data, title, bins=10):
     plt.show()
     return model_params
 
-model_params = plot_lengths_distribution_stats(data_eps, title="Fitted Lognormal and Gamma Distribution", bins=21)
+model_params = plot_lengths_histogram_fit(data_eps[data_eps["date"] > "2021-09-1"], title="Fitted Lognormal and Gamma Distribution", bins=20)
 ```
+We select all episodes after september 1st 2022, as the episode length is more consistent there.
+
+::: {.callout-note collapse="true"}
+## Extra info on selection
+If we take the full distribution of episodes, the resulting distribution becomes bimodal. This essentially means that the distribution originates from the combination of 2 seperate distributions. This is also visible in the lineplot, where the first episodes are clearly different from the last episodes.
+:::
 
 It is fun to see that the distribution of Words-Per-Episode fits these statistical distributions so well. The Gamma distribution succesfully models other problems such as:
 
@@ -168,7 +274,7 @@ It is fun to see that the distribution of Words-Per-Episode fits these statistic
 
 The Lognormal distribution, which appears to have the best fit, occurs in problems such as:
 
-* A countries income distribution
+* A country's income distribution
 * The length of chess games
 * Particle size distributions in various contexts
 
@@ -178,9 +284,8 @@ So now we can add to these lists:
 If we look at the raw data, the mean and the standard deviation are given by:
 
 ```{python}
-lengths = [get_length(text) for text in corpus]
-print(f"Mean = {round(np.mean(lengths),2)}")
-print(f"Standard deviation ={round(np.std(lengths),2)}")
+print(f"Mean = {round(data['WPE'].mean(),2)}")
+print(f"Standard deviation = {round(data['WPE'].std(),2)}")
 ```
 
 The best fit on this distribution for the Lognormal distributions gives:
@@ -191,7 +296,7 @@ params = model_params[0]
 mu = np.log(params[2])
 sigma = params[0]
 print(f"Mean = {round(np.exp(mu+sigma**2/2),2)}")
-print(f"Standard deviation ={round(np.sqrt((np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)),2)}")
+print(f"Standard deviation = {round(np.sqrt((np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)),2)}")
 ```
 
 The best fit on this distribution for the Gamma distributions gives:
@@ -200,22 +305,74 @@ The best fit on this distribution for the Gamma distributions gives:
 #| echo: false
 params = model_params[1]
 print(f"Mean = {round(params[0]*params[2],2)}")
-print(f"Standard deviation ={round(np.sqrt(params[0]*params[2]**2),2)}")
+print(f"Standard deviation = {round(np.sqrt(params[0]*params[2]**2),2)}")
 ```
 
+## Words per Minute per Episode
+Maarten and Tom talk freely in the podcast, it is actually fair to say that mostly Maarten talks.
+Are there episodes that are more energetic than others? This is not an easy question to answer, but we can use the talkin speed as a proxy for our answer. A relatively slow talking speed may indicate a relaxed or low-energy episode. Meanwhile, an episode where the talking-speed is relatively high might indicate a more energetic episode.
+
+```{python}
+data["WPM"] = data["WPE"]/data["duration-m"]
+
+def plot_wpm_over_time(data):
+    """
+    Plot words-per-minute over time.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Information about the episodes.
+    """    
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    plt.title("Words-per-Minute over Time")
+    ax.plot(data["date"], data["WPM"])
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Words per minute (words/minute)")
+    plt.xticks(rotation = 70)
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+
+plot_wpm_over_time(data.sort_values(by=["date", "episode"]))
+```
+
+```{python}
+def plot_wpm_histogram(data):
+    """
+    Plot histogram of Words-per-Minute distribution
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Information about the episodes.
+    """    
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    plt.title("Distribution of Words-per-Minute")
+    ax.hist(data["WPM"], bins=30, density=True, edgecolor="#EAEAF2", linewidth=1)
+    ax.set_xlabel("Words per minute (words/minute)")
+    ax.set_ylabel("Probability Density")
+    plt.xticks(rotation = 70)
+plot_wpm_histogram(data)
+```
 # Wordcloud of most common words
 Which words, excluding stopwords (de, het een, deze, die, zij, zijn, etc.). 
 
 ## Including common stopwords
 ```{python}
-full_text = " ".join(corpus_eps)
-# Generate a word cloud image
-wordcloud = WordCloud(width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
+full_text = " ".join(data_eps["text"])
+path_wordcloud_full = "./cache/wordcloud_full.pickle"
+if not os.path.exists(path_wordcloud_full):
+    # Generate a word cloud image
+    wordcloud_full = WordCloud(width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
+    write_pickle(path_wordcloud_full, wordcloud_full)
+else:
+    wordcloud_full = read_pickle(path_wordcloud_full)
+
 
 # Display the generated image:
 # the matplotlib way:
-plt.figure(figsize=(8,5))
-plt.imshow(wordcloud, interpolation='bilinear')
+plt.figure(figsize=(8.5, 5.5))
+plt.imshow(wordcloud_full, interpolation='bilinear')
 plt.axis("off")
 plt.tight_layout()
 plt.show()
@@ -232,12 +389,16 @@ dutch_stopwords = set(dutch_stopwords)
 ```
 
 ```{python}
-wordcloud = WordCloud(stopwords=dutch_stopwords, width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
-
+path_wordcloud_stopwords = "./cache/wordcloud_stopwords.pickle"
+if not os.path.exists(path_wordcloud_stopwords):
+    wordcloud_stopwords = WordCloud(stopwords=dutch_stopwords, width=800*3, height=500*3, include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
+    write_pickle(path_wordcloud_stopwords, wordcloud_stopwords)
+else:
+    wordcloud_stopwords = read_pickle(path_wordcloud_stopwords)
 # Display the generated image:
 # the matplotlib way:
-plt.figure(figsize=(8,5))
-plt.imshow(wordcloud, interpolation='bilinear')
+plt.figure(figsize=(8.5, 5.5))
+plt.imshow(wordcloud_stopwords, interpolation='bilinear')
 plt.axis("off")
 plt.tight_layout()
 plt.show()
@@ -248,36 +409,274 @@ This is great as a creative expression of the words, but let's also look at the 
 ## Table of most common words
 
 ```{python}
-def get_top_n_words(corpus, n=None):
+def get_top_n_words(data):
     """
-    List all words in the corpus that are used on average >= 1 time per episode
+    List all words in the corpus that are used on average >= 1 time per episode.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Information about the episodes.
+
+    Returns
+    -------
+    word_freq : pd.DataFrame
+        Table of word frequencies.
+    bag_of_words : pd.DataFrame
+        Table containing the word frequencies per episode.
+    vec : sklearn.CountVectorizer
+        CountVectorizer fitted to the corpus
     """
-    vec = CountVectorizer(ngram_range=(1,5), stop_words=dutch_stopwords).fit(corpus)
-    bag_of_words = vec.transform(corpus)
+    vec = CountVectorizer(ngram_range=(1,5), stop_words=dutch_stopwords).fit(data["text"])
+    bag_of_words = vec.transform(data["text"])
     sum_words = bag_of_words.sum(axis=0) 
     word_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
-    word_freq = sorted(word_freq, key = lambda x: x[1], reverse=True)[:n]
+    word_freq = sorted(word_freq, key = lambda x: x[1], reverse=True)
     word_freq = pd.DataFrame(word_freq, columns=("Token", "Count"))
-    word_freq["Rate_per_Episode"] = round(word_freq["Count"]/len(corpus_eps),2)
+    word_freq["Rate_per_Episode"] = round(word_freq["Count"]/data.shape[0],2)
     word_freq = word_freq[word_freq["Rate_per_Episode"]>=1]
     return word_freq, bag_of_words, vec
 ```
 
 ```{python}
-word_freq, bag_of_words, vectorizer = get_top_n_words(corpus_eps)
+# This cell is slow, should cache
+path_top_n_words = "./cache/top_n_words.pickle"
+if not os.path.exists(path_top_n_words):
+    word_freq, bag_of_words, vectorizer = get_top_n_words(data_eps)
+    package = [word_freq, bag_of_words, vectorizer]
+    write_pickle(path_top_n_words, package)
+else:
+    package = read_pickle(path_top_n_words)
+    word_freq, bag_of_words, vectorizer = package
 pd.set_option('display.max_rows', word_freq.shape[0]+1)
 word_freq
 ```
 
-Let's attempt to track the use of "Natuurlijk" across episodes
+Let's attempt to track the use of "oekraïne" across episodes
 ```{python}
 target_word = "oekraïne"
-def plot_dist_target(target_word):
+def plot_word_over_time(target_word):
+    """
+    Plot the frequency of the target word over time.
+
+    Parameters
+    ----------
+    target_word : str
+        Word of interest.
+    """    
     id = [idx for word, idx in vectorizer.vocabulary_.items() if word == target_word][0]
     dist = bag_of_words[:,id].toarray().T[0]
-    plt.plot(episode_numbers[1:], dist)
+
+    fig,ax = plt.subplots(figsize=(8.5, 5.5))
+    plt.plot(data_eps["date"], dist)
     plt.title(f"Mentions of the word: {target_word}")
     plt.ylabel("Counts")
-    plt.xlabel("Episode number")
-plot_dist_target(target_word)
+    plt.xlabel("Date")
+
+    # set x-axis
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+    plt.xticks(rotation = 70)
+    plt.show()
+
+plot_word_over_time(target_word)
+```
+
+```{python}
+plot_word_over_time("rutte")
+plot_word_over_time("vvd")
+```
+
+
+```{python}
+plot_word_over_time("bbb")
+```
+
+# Topic Modelling on the Podcast!
+We used unsupervised Machine Learning to extract common topics from the various episodes. This part of the analysis is taken from [Maarten Grootendorst](https://towardsdatascience.com/using-whisper-and-bertopic-to-model-kurzgesagts-videos-7d8a63139bdf)
+
+Getting a topic per sentence is nice, but at the same time it is rather difficult to really distill a topic from a sentence. So instead we want to devide the blocks into slightly more meaningful chuncks. For this I rather arbitrarily devide the podcast into minutes. The question then is, how many sentences do we have per minute?
+Luckily, we can answer this with data we've already collected:
+
+```{python}
+from nltk.tokenize import sent_tokenize
+words_per_sentence = []
+sentences_all = []
+for text in data["text"]:
+    sentences = sent_tokenize(text, language="dutch")
+    for sentence in sentences:
+        tokenized = tokenizer.tokenize(sentence)
+        sentences_all.append(sentence)
+        length = len(tokenized)
+        words_per_sentence.append(length)
+
+wps = np.array(words_per_sentence)
+# Filter out some processing bugs
+wps = wps[wps<500]
+wps = np.mean(wps)
+wpm = np.mean(data["WPM"])
+print(f"The number of sentences per minute is {round(wpm/wps,2)}")
+```
+So we opt to choose bundels of roughly 13 sentences as a topic
+
+```{python}
+# Sentencize the transcripts and track their titles
+docs = []
+titles = []
+timestamps = []
+for title, text, timestamp in zip(data["titles"], data["text"], data["date"]):
+    sentences = sent_tokenize(text, language="dutch")
+    n_chunks = len(sentences)//13
+    try:
+        chunks = np.array_split(sentences, n_chunks)  
+        for chunk in chunks:
+            chunk = str("\n ".join(chunk))
+            docs.append(chunk)
+            titles.append(title)
+            timestamps.append(timestamp)
+
+    except ValueError:
+        chunks = "\n ".join(sentences)
+        chunk = chunks
+        docs.append(chunk)
+        titles.append(title)
+        timestamps.append(timestamp)
+
+    
+```
+
+```{python}
+from sentence_transformers import SentenceTransformer
+
+embeddings_path = "./cache/embeddings.npy"
+if not os.path.exists(embeddings_path):
+    # Create embeddings from the documents
+    sentence_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+
+    embeddings = sentence_model.encode(docs)
+    np.save(embeddings_path, embeddings)
+else:
+    embeddings = np.load(embeddings_path)
+```
+
+```{python}
+from bertopic import BERTopic
+from umap import UMAP
+from hdbscan import HDBSCAN
+from sklearn.feature_extraction.text import CountVectorizer
+
+model_path = "./cache/BERTopic_topic_model.pickle"
+if not os.path.exists(model_path):
+    # Define sub-models
+    sentence_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+    vectorizer = CountVectorizer(stop_words=dutch_stopwords)
+    umap_model = UMAP(
+        n_neighbors=10, #Higher -> More global structure, less local
+        n_components=8, #Effects clustering mostly, advice is to leave around ~5
+        min_dist=0.0,
+        metric='cosine',
+        random_state=2112)
+
+    hdbscan_model = HDBSCAN(
+        min_cluster_size=15, #Higher -> less clusters, bigger size
+        min_samples=5, #Lower -> less outlier classifications, may be detrimental to quality topics.
+        metric='euclidean', cluster_selection_method='eom')
+
+    # Train our topic model
+    topic_model = BERTopic(
+        n_gram_range=(1, 2),
+        min_topic_size=10,
+        embedding_model=sentence_model,
+        umap_model=umap_model,
+        hdbscan_model=hdbscan_model,
+        vectorizer_model=vectorizer,
+    )
+
+    topic_model = topic_model.fit(docs, embeddings)
+
+    # Save model
+    topic_model.save(model_path)
+else:
+    topic_model = BERTopic().load(model_path)
+```
+
+## What topics does the model find?
+
+```{python}
+topics = topic_model.get_topic_info()
+topics
+```
+
+For the top 20 topics, the most representative minute of of the podcast is as follows:
+```{python}
+for topic_i in range(1, 21):
+    print(f"The topic is defined by: {topics.iloc[topic_i]['Name']}" + "\n")
+    example = " ".join(topic_model.get_representative_docs()[topic_i-1])
+    print(f"Representative minute of podcast: {example}" + "\n\n")
+```
+
+## How does the model think these are related?
+
+```{python}
+# Generate nicer looking labels and set them in our model
+topic_labels = topic_model.generate_topic_labels(
+    nr_words=3,
+    topic_prefix=False,
+    word_length=25,
+    separator=","
+)
+topic_model.set_topic_labels(topic_labels)
+```
+
+```{python}
+# Create reduced embeddings we can reuse for consistency
+reduced_embeddings_path = "./cache/reduced_embeddings.npy"
+if not os.path.exists(reduced_embeddings_path) or 1:
+    umap_model_2d = UMAP(n_neighbors=10, n_components=2, min_dist=0.0, metric='cosine', random_state=2112).fit(embeddings)
+    reduced_embeddings = umap_model_2d.embedding_
+    np.save(reduced_embeddings_path, reduced_embeddings)
+else:
+    reduced_embeddings = np.load(reduced_embeddings_path)
+```
+
+```{python}
+# Manually selected some interesting topics to prevent information overload
+topics_of_interest = list(range(0,100))
+
+# I added the title to the documents themselves for easier interactivity
+adjusted_docs = ["<b>" + title + "</b><br>" + doc[:100] + "..." 
+                 for doc, title in zip(docs, titles)]
+
+# Visualize documents
+topic_model.visualize_documents(
+    adjusted_docs, 
+    reduced_embeddings=reduced_embeddings, 
+    hide_annotations=False, 
+    topics=topics_of_interest,
+    custom_labels=True,
+    width=1000,
+    height=1000
+)
+```
+
+
+## How are the topics related in an hierarchical sense?
+```{python}
+hierarchical_topics = topic_model.hierarchical_topics(docs)
+topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics)
+```
+If you hover over the black circles, you will see the topic representation at that level of the hierarchy. These representations help you understand the effect of merging certain topics together. Some might be logical to merge whilst others might not. Moreover, we can now see which sub-topics can be found within certain larger themes.
+
+## How are the hierarchical topics related semanticly?
+
+```{python}
+plt.figure(figsize=(8.5, 5.5))
+topic_model.visualize_hierarchical_documents(docs, hierarchical_topics, reduced_embeddings=reduced_embeddings)
+```
+
+## How are the top 10 topics distributed over time?
+
+```{python}
+topics_over_time = topic_model.topics_over_time(docs, timestamps)
+topic_model.visualize_topics_over_time(topics_over_time, topics=list(range(0,10)))
 ```
