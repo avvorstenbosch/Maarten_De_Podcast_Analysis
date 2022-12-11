@@ -2,7 +2,7 @@
 title: "'Maarten van Rossem - De Podcast' - #315 Textanalysis of the podcast"
 author: "Alex van Vorstenbosch"
 date: today
-abstract: "De 'Maarten van Rossem'-podcast is one of the most popular podcasts in The Netherlands, which has produced more than 300 episodes in the past 2 years. In this article, we produce some fun, and hopefully interesting, statistics about the podcast. This is done by collecting all the currently available podcasts from the web, and transcribing them using the newly available `Whisper` automated speech recognition model by [openai](https://github.com/openai/whisper). After some initial 'simple' analysis extract topics from podcast using `BERTopic`, a Topic Modeling pipeline by [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic). My goal with this project is to have fun analysing the wise words of Maarten and Tom (And of course to earn the honor of being mentioned in the podcast!)"
+abstract: "De 'Maarten van Rossem'-podcast is one of the most popular podcasts in The Netherlands, which has produced more than 300 episodes in the past 2 years. In this article, we produce some fun, and hopefully interesting, statistics about the podcast. This is done by collecting all the currently available podcasts from the web, and transcribing them using the newly available `Whisper` automated speech recognition model by [OpenAI](https://github.com/openai/whisper). After some initial statistical analysis of the podcast, finish our analysis by extracting topics from podcast using `BERTopic`, a Topic Modeling pipeline by [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic). The goal of this project is first of all to have fun analysing the words of Maarten and Tom. I hope you'll learn something interesting from all this, and that you have fun along the way. (And I hope that Maarten and Tom would mention this project in the podcast!)"
 abstract-title: "Analysing the Podcast"
 number-sections: true
 highlight-style: arrow
@@ -12,13 +12,14 @@ format:
     embed-resources: true
     number-sections: true
     theme:
-      light: flatly
+      light: default
       dark: darkly
     smooth-scroll: true
     toc: true
     toc-title: Table of Contents
 code-overflow: wrap
-code-fold: show
+code-fold: true
+code-summary: "Show the code"
 code-tools: 
     source: https://github.com/avvorstenbosch/Maarten_De_Podcast_Analysis
 execute:
@@ -28,16 +29,16 @@ title-block-banner: "#27445C"
 jupyter: maarten
 ---
 
-# Code setup {#sec-setup}
+# Introduction and Code Setup {#sec-setup}
 Hi! Welcome at the start of our journey through the data of the 'Maarten van Rossem' podcast.
-As you will notice below, I've included all the code for this analysis in this document, so you can see exactly how the analysis was performed. Some may find this wonderful, while some may find this more annoying than anything else. To be fair, it does hinder the readability of the article a little. So if the latter is the case for you, you can click the `</> Code` tab to the right of the Title, and click `Hide all code` to set all code chunks to be folded and hidden away.
+As you will notice below, I've included all the code for this analysis in this document, so you can see exactly how the analysis was performed. Some may find this wonderful, while some may find this more annoying than anything else. To be fair, it does hinder the readability of the article a little. That is why the default setting is to hide the code. However, if you'd like to see all the code, you can click the `</> Code` tab to the right of the Title, and click `Show all code` to set all code chunks to be unfolded and visible.
 
-It's also good to note, that if you are interested in the source-code other elements of this project such as the webscraper, please click `View Source` in the same tab. 
+It's also good to note, that if you are interested in the source-code of other elements of this project such as the webscraper, please click `View Source` in the same tab to visit my github profile. 
 
 A final note is that at the top right of the page you will find a small button which you can use to toggle `dark-mode` for this article.
 
 Alright, I said final note but this time I mean it:
-This article was written for desktop viewing. It won't throw errors if you try to read this on a mobile device, but the formatting will be wonky and the the interactive figures become almost impossible to navigate. So if you're able to, please read this on a desktop device.
+This article was written for desktop viewing. It won't throw errors if you try to read this on a mobile device, but the formatting will be wonky and the interactive figures will be almost impossible to navigate. So if you're able to, please read this on a desktop device.
 
 Now that we've handled these formalities, let's get started!
 
@@ -50,6 +51,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib.colors import rgb2hex
 import plotly.graph_objects as go
 
 # Set the random seed for reproducability
@@ -59,12 +61,14 @@ np.random.seed(2112)
 plt.style.use('seaborn-darkgrid')
 plt.rcParams['figure.dpi'] = 125
 px = 1/plt.rcParams['figure.dpi'] 
-figsize= (1200*0.9, 700*0.9) #px
+figsize= (int(1200*0.9), int(700*0.9)) #px
 figsize_inch = (figsize[0]*px, figsize[1]*px)
 
 # For Fitting distributions
-from scipy.stats import gamma, lognorm, linregress
+from scipy.stats import norm, lognorm, gamma, linregress
 from scipy.optimize import curve_fit
+from statsmodels.nonparametric.kde import KDEUnivariate
+from sklearn.metrics import mean_squared_error
 
 # For simple text processing
 from nltk.corpus import stopwords
@@ -114,8 +118,7 @@ def read_pickle(path):
 
     Returns
     -------
-    any
-        unpickled object(s)
+    any unpickled object(s)
     """    
     with open(path, 'rb') as f:
         object = pickle.load(f)
@@ -146,7 +149,7 @@ def read_txt_file(path):
 
 ## Load the data
 Here we load the data, which has been stored in a dataframe.
-Below the cell, we've printed a short example of what the data looks like.
+Below the cell, we've printed a short example of what the data looks like:
 
 ```{python}
 data = pd.read_pickle("../extract_data/data.pickle")
@@ -166,39 +169,45 @@ data["is_episode"] = data["episode"].transform(lambda num: num > 0)
 
 print_cols = ["titles", "date", "duration", "episode"]
 pd.set_option('display.max_colwidth', 40)
-data.sample(3)
+data.head(3)
 ```
 
-# 'Goed Nieuws' - Statistics about the podcast {#sec-statistics}
+# 'Goed Nieuws' - There is always a new episode around the corner {#sec-statistics}
 Let's get started with our analysis! 
 There are so many points were we could possibly start, so let's start with analysing the dataframe I prepared for us.
 
 From the dataframe we can see that the number of 'episodes' on the channel is:
 ```{python}
 #| output: asis
+#| echo: false
 print(f"{data.shape[0]} episodes.")
 ```
 
-Great! But hold on, that's not quite right... I thought we were on something like episode 313?
-The podcast-channel also includes specials, trailers, and the likes
+Great! But hold on, that's not quite right... I thought we were on something like episode 320?
+The reason for all the extra episodes is that the podcast-channel also includes specials, trailers, and the likes:
 
 ```{python}
 is_ep = (data.is_episode==True)
 data[~is_ep][print_cols].to_html(index=False)
 ```
 
-So we should perhaps ignore these specials, as well as the mysterious 5 second episode 'Goed Nieuws', we have:
+For our analysis, it is better to ignore these specials, as they are not representative for typical podcast episodes. When we remove these episodes we're left with:
 
 ```{python}
 #| output: asis
-num_episodes = data[is_ep].shape[0]
+#| echo: false
+data_full = data.copy()
+
+# The standard dataframe will only contain the numbered episodes from now on
+data = data[is_ep].reset_index(drop=True)
+num_episodes = data.shape[0]
 print(f"{num_episodes} episodes.")
 ```
 
 The collapsible cell below is something you'll encounter more often in this article. It's a convenient way for us to put interesting results into the file, while making sure we don't create massive clutter in the process.
 
 ::: {.callout-note collapse="true"}
-## Click here to see the raw statistics for all the episodes on the channel
+## Click here to see the raw statistics for all the episodes on the channel!
 ```{python}
 #| echo: false
 data[print_cols].to_html(index=False)
@@ -208,58 +217,73 @@ data[print_cols].to_html(index=False)
 So as you may have seen above, the first real episode was:
 
 ```{python}
-data[is_ep].sort_values("date").iloc[0:1][print_cols].to_html()
+data.sort_values("date").iloc[0:1][print_cols].to_html()
 ```
 
-That's quite a title! Maarten and Tom are not afraid to speak their mind, but we knew that already.
+That's quite the title! Maarten and Tom are not afraid to speak their mind, that's for sure!
 So the first episode was released on the 7th of June 2020. This means, that the podcast has been running for a total of:
 
 ```{python}
 #| output: asis
-days_running = (max(data[is_ep].date) - min(data[is_ep].date)).days
+days_running = (max(data.date) - min(data.date)).days
 print(f"{days_running} days.")
 ```
 
-For the loyal listeners, that's good new!
+For the loyal listeners, that's good new! As we have 322 episodes at the time of writing.
 
 ```{python}
 #| output: asis
+#| echo: false
 mean_time_between_episodes = days_running/num_episodes
 print(f"It means that the average waiting time for a new episode is only {mean_time_between_episodes:.2f} days! That is more than {7/mean_time_between_episodes:.0f} episodes per week, wow!")
 ```
 
-It does probably help that Maarten and Tom can talk about pretty much anything.
-I wonder how much talking they actually do per episode, and is there a lot of variation in how much they talk? Let's find out in the next section.
+It does probably help that Maarten and Tom can talk about pretty much anything, given that they are both a history and a current affairs podcast. However, releasing many episodes doesn't mean a lot if there is only little content in each episode. Now, I feel quite satisfied with amount of content released by Maarten and Tom, but perhaps we can quantify it? I wonder how much talking they actually do per episode? Let's find out in the next section!
 
-## 'You don't have to take my word for it' - How many words are spoken per episode?
-Let's slowly start wading a little deeper into the contents of the episodes. I've used `Whisper` to transcribe all the episodes of the podcast into documents. It's really quite shocking how well this works.
-If you have some experience with Python, it's possible to run the software on pretty much any computer, so I would advice you to see for yourself how good the results are. 
+# 'Beste mensen' - The rate at which content is being released has tripled!
+Let's slowly start wading a little deeper into our sea of data:  'the contents of the episodes'. I've used the [`Whisper`](https://github.com/openai/whisper) deep neural network model to transcribe all the episodes of the podcast into documents. It's really quite perplexing how well this works. It took about 3 days of GPU time to transcribe all episodes of the podcast. Luckily for me, it was a rather cold weekend, so I could use these calculations the heat my appartement a little.
+If you have some experience with Python and/or the commandline, it's possible to run the software on pretty much any computer, so I would advice you to see for yourself how good the results are. 
 
 ::: {.callout-caution}
 ## There is always room for improvement
-While the results are really impressive, they are of course not perfect. For example, `Whisper` struggles with processing the episode jingle "Met van Rossem. Kunt u mij horen? ", as demonstrated by this short selection of examples:
+While the results are really impressive, they are of course not perfect. The Word-Error-Rate (WER) for Dutch was estimated at 6.7%. Depending on the context, this WER might be higher or lower. For example, `Whisper` struggles with processing the episode jingle "Met van Rossem. Kunt u mij horen?", as demonstrated by this short selection of transcription examples:
 
 * Met verlossem. Kunt u bijhouden?
 * Met Verlossum. Kunt u mij horen?
 * Het verhorsum. Kunt u mij horen?
 * Het is van Lawson, kunt u mij horen?
 
-This is something you will see more often in this analysis. My interpretation of why these errors happen is this: `Whisper` tries to use both the spectrogram of the audio as well as the textual context to generate the transcription, but if there is little relevant context to go by, the model needs to make an essentially 'random' guess to what could be meant. This is of course almost always the case for the names of people (except for example famous political figures, which would have been included in the training data) in combination with music or other sounds.
+This is something you will see more often in this analysis. My interpretation of why these errors happen is this: `Whisper` tries to use both the spectrogram of the audio as well as the textual context to generate the transcription, but if there is little relevant context to go by, the model needs to make an essentially 'random' guess to what could be meant. This is of course the case at for the start-of-episode jingle as it has no relevant context. Also, names are difficult without context. This is almost always the case for the names of people, except for example famous political figures which would have been included in the training data. Finally, the music and singing might further confuse the model.
 :::
 
-### All episodes
-Looking at all the content released by Maarten and Tom, how many words are spoken per episode?
+## How much content is there in each episode?
+Content is hard to measure, so we just take the number of words spoken as a proxy for the content of each episode. This is easily visualised with a histogram.
 ```{python}
-#| label: fig-wpedist
+#| label: fig-wpe_dist
 #| fig-cap: The distribution of Words-per-Episode for all the content released as part of the podcast
 tokenizer = RegexpTokenizer(r'\w+')
 
 def get_length(text):
+    """
+    Calculates length of text by counting the number of tokens.
+
+    Parameters
+    ----------
+    text : str
+        Text to process.
+    
+    Returns
+    -------   
+    _ : int 
+        Length of text. 
+    """
     tokens = tokenizer.tokenize(text)
     return(len(tokens))
 
 # Words-per-Episode
 data["WPE"] = data["text"].transform(lambda text: get_length(text))
+data_full["WPE"] = data_full["text"].transform(lambda text: get_length(text))
+
 
 def plot_lengths_histogram(data, title, bins=12):
     """
@@ -282,14 +306,16 @@ def plot_lengths_histogram(data, title, bins=12):
     plt.tight_layout()
     plt.show()
 
-plot_lengths_histogram(data, title="All files", bins=12)
+plot_lengths_histogram(data_full, title="All released episodes (specials included)", bins=20)
 ```
 
-As we can see in @fig-wpedist the content is quite varied in terms of how much is being said in the conversations. The extremely short end is of course the 5 seconds long 'Goed nieuws' episode, and some of the longest episodes are the specials.
+As we can see in @fig-wpe_dist the content is quite varied. Some episodes have almost 16.000 words, while others have only about 2000. But on the whole, most episodes have around 6.000 words. As it turns out, the episodes with the most words are the specials, which are also the longest episodes.
+
+A histogram of course aggregates our data. Another fun way to visualize the content, is to plot all the individual datapoints over time. Will we be able to spot any trends over time?
 
 ```{python}
-#| label: fig-wpetime
-#| fig-cap: The distribution of Words-per-Episode over time, shown together with the duration of episodes over time. A clear trend is visible where episodes at the start of the podcast lasted more than ~50 minutes, while in the second half of the podcast episode duration dropped to less than ~40 minutes. At the same time we can see that the rate at which episodes were released increased rapidly, the density of datapoints increases by a lot! 
+#| label: fig-wpe_time
+#| fig-cap: The distribution of Words-per-Episode over time, shown together with the duration of episodes over time. A clear trend is visible where episodes at the start of the podcast lasted more than ~50 minutes, while in the second half of the podcast episode duration dropped to around ~30 minutes. At the same time we can see that the rate at which episodes were released increased rapidly, the density of datapoints increases by a lot! 
 
 data["duration-s"] = pd.to_timedelta(data["duration"]).dt.total_seconds()
 data["duration-m"] = data["duration-s"]/60.0
@@ -305,7 +331,7 @@ def plot_wpe_over_time(data):
     """    
     fig,ax = plt.subplots(figsize=figsize_inch)
     plt.title("Words-per-Episode and Episode Duration")
-    ax.plot(data["date"], data["WPE"],alpha=0.5, label="Words-per-Episode")
+    ax.plot(data["date"], data["WPE"], alpha=0.5, label="Words-per-Episode")
     ax.set_xlabel("Date")
     ax.set_ylabel("Words_per_Episode (#)")
     ax.scatter(data["date"], data["WPE"], s=5, label="Individual datapoints")
@@ -327,89 +353,19 @@ def plot_wpe_over_time(data):
 plot_wpe_over_time(data.sort_values(by=["date", "episode"]))
 ```
 
-In @fig-wpetime we can see some interesting trends over time. 
-This made me wonder, has the amount of content over time increased of decreased?
+We see an interesting pattern. @fig-wpe_time shows us that the podcast started with a few long episodes per month, and slowly evolved into many shorter episodes per week. I belive that when Maarten and Tom started recording the podcast, they only did so on saturdays. Then they started spliting recordings into multiple episodes, and these days, they record multiple times a week. 
 
-### Content over time
+So the episodes became shorter, but also more frequent. The question is which of the two had a bigger effect? Are we getting less or more content each week?
 
-```{python}
-# label: fig-content
-# fig-cap: 
+Before we answer that question, I would like to revisit our histogram, as @fig-wpe_time has given us some usefull information and how to filter our data to make a histogram
 
-def plot_content(data):
-    def weeks_since_start(date):
-        time_diff = date - data.iloc[0].date
-        weeks_diff = int(time_diff / np.timedelta64(1, 'W'))
-        return weeks_diff
-    # Convert date to weeks since start
-    data_plot = data.copy()
-    data_plot = data_plot.sort_values("date")
-    data_plot["weeks"] = data_plot.date.transform(lambda dt: weeks_since_start(dt))
-    weeks = data_plot.weeks.unique()
+### 'Doe maar (log)normaal...' -  Fitting statistical distributions to the histogram
 
-    # Calculate weekly increase
-    WPW = data_plot.groupby("weeks").WPE.sum()
+We could see from the previous figure, that the structure of episodes has changed quite a bit over time. The early episodes were typically around an hour long, and in the summer of around 2021 this was brought back to around ~40 minutes. It is interesting to note that we can actually fit statistical distributions to the variation that we see, as we will do in the following figure. We select all episodes released after August 1st 2022, as the release schedule and episode length become more consistent after this point.
 
-    # Perform linear regression with intercept = 0
-    weeks = np.array(weeks)
-    weeks = weeks[:,np.newaxis]
-    a, _, _, _ = np.linalg.lstsq(weeks, WPW)
-    plt.scatter(weeks, WPW)
-    plt.plot(weeks, a*weeks, c='r', label="$y = ax$ \n"+f"a = {a[0]:.2f} [words-per-week]")
-    plt.legend(loc="upper left")
-    plt.xlabel("Weeks since start of podcast")
-    plt.ylabel("Released content per week [words]")
-    plt.title("The amount of content per week is steadily increasing")
-
-plot_content(data)
-```
-
-```{python}
-# label: fig-content
-# fig-cap: 
-
-def plot_content_logistic(data):
-    def weeks_since_start(date):
-        time_diff = date - data.iloc[0].date
-        weeks_diff = int(time_diff / np.timedelta64(1, 'W'))
-        return weeks_diff
-    
-    def logifunc(x,A,x0,k,off):
-        return A / (1 + np.exp(-k*(x-x0)))+off
-
-    # Convert date to weeks since start
-    data_plot = data.copy()
-    data_plot = data_plot.sort_values("date")
-    data_plot["weeks"] = data_plot.date.transform(lambda dt: weeks_since_start(dt))
-    weeks = data_plot.weeks.unique()
-
-    # Calculate weekly increase
-    WPW = data_plot.groupby("weeks").WPE.sum()
-
-    # Perform linear regression with intercept = 0
-    plt.scatter(weeks, WPW)
-    popt, pcov = curve_fit(logifunc, weeks, WPW, p0=[25000,60,0.1, 5000])
-    plt.plot(weeks, logifunc(weeks, *popt), 'r-',label='Fitted function')   
-    plt.legend(loc="upper left")
-    plt.xlabel("Weeks since start of podcast")
-    plt.ylabel("Released content per week [words]")
-    plt.title("The amount of content per week is steadily increasing")
-    plt.show()
-
-plot_content_logistic(data)
-```
-### Only the numbered episodes
-
-```{python}
-plot_lengths_histogram(data[is_ep], title="Numbered episodes", bins=12)
-```
-
-### 'Doe maar normaal...' -  Fitting statistical distributions to the histogram
-
-We could see from the previous figure, that the structure of episodes has changed quite a bit over time. The early episodes were typically around an hour long, and in the summer of around 2021 this was brought back to around ~40 minutes. It is interesting to note that we can actually fit statistical distributions to the variation that we see, as we will do in the following figure:
 ```{python}
 #| label: fig-lognormal
-#| fig-cap: "Fitting a Gamma and Lognormal distribution to the distribution of Words-per-Episode of the podcast."
+#| fig-cap: "Fitting a Gamma and Lognormal distribution to the Words-per-Episode of the podcast shows that some interesting patterns emerge in the data. Both distributions seem plausible for the podcast."
 def plot_lengths_histogram_fit(data, title, bins=12):
     """
     Plot a histogram of episode lengths fit statistical distributions.
@@ -454,13 +410,12 @@ def plot_lengths_histogram_fit(data, title, bins=12):
     plt.show()
     return model_params
 
-data_eps = data[is_ep]
-model_params = plot_lengths_histogram_fit(data_eps[data_eps["date"] > "2021-09-1"], title="Fitted Lognormal and Gamma Distribution", bins=20)
+data_second_half = data[data["date"] > "2021-08-1"]
+model_params = plot_lengths_histogram_fit(data_second_half, title="Fitted Lognormal and Gamma Distribution", bins=20)
 ```
-We select all episodes after september 1st 2022, as the episode length is more consistent there.
 
 ::: {.callout-note collapse="true"}
-## Extra info on selection
+## Extra info on the selection for this figure
 If we take the full distribution of episodes, the resulting distribution becomes bimodal. This essentially means that the distribution originates from the combination of 2 seperate distributions. This is also visible in the lineplot, where the first episodes are clearly different from the last episodes.
 :::
 
@@ -470,20 +425,23 @@ It is fun to see that the distribution of Words-Per-Episode fits these statistic
 * the severity of insurance claims
 * the load on webservers
 
-The Lognormal distribution, which appears to have the best fit, occurs in problems such as:
+The Lognormal distribution succesfully models problems such as:
 
 * A country's income distribution
 * The length of chess games
 * Particle size distributions in various contexts
 
-So now we can add to these lists:
+So perhaps we can add to these lists:
+
 * the words-per-episode for the 'Maarten van Rossum' podcast 
 
+::: {.callout-note collapse="true"}
+## The statistics of the statistical distributions above.
 If we look at the raw data, the mean and the standard deviation are given by:
 
 ```{python}
-print(f"Mean = {round(data['WPE'].mean(),2)}")
-print(f"Standard deviation = {round(data['WPE'].std(),2)}")
+print(f"Mean = {round(data_second_half['WPE'].mean(),2)}")
+print(f"Standard deviation = {round(data_second_half['WPE'].std(),2)}")
 ```
 
 The best fit on this distribution for the Lognormal distributions gives:
@@ -505,36 +463,141 @@ params = model_params[1]
 print(f"Mean = {round(params[0]*params[2],2)}")
 print(f"Standard deviation = {round(np.sqrt(params[0]*params[2]**2),2)}")
 ```
+:::
 
-## Words per Minute per Episode
-Maarten and Tom talk freely in the podcast, it is actually fair to say that mostly Maarten talks.
-Are there episodes that are more energetic than others? This is not an easy question to answer, but we can use the talkin speed as a proxy for our answer. A relatively slow talking speed may indicate a relaxed or low-energy episode. Meanwhile, an episode where the talking-speed is relatively high might indicate a more energetic episode.
+With that out of the way, lets answer the question at hand: Are we getting less or more content each week?
 
+### The evolution of content over time
+In @fig-wpe_time we looked at the content in each unique episode. But it might be more interesting to look at the content released over a set period of time, for example 'per week'. By doing this we can account for both the episodes becoming shorter and the episodes becoming more frequent. 
 ```{python}
-data["WPM"] = data["WPE"]/data["duration-m"]
+#| label: fig-content_linear
+#| fig-cap: "There is a clear rising trend in the weekly data, as illustrated by the linear fit. The trend indicates that the amount of weekly content has been increasing with about 144 words per week."
 
-def plot_wpm_over_time(data):
-    """
-    Plot words-per-minute over time.
+def plot_content(data):
+    START = data.iloc[0].date
 
-    Parameters
-    ----------
-    data : pd.DataFrame
-        Information about the episodes.
-    """    
-    fig, ax = plt.subplots(figsize=figsize_inch)
-    plt.title("Words-per-Minute over Time")
-    ax.plot(data["date"], data["WPM"])
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Words per minute (words/minute)")
-    plt.xticks(rotation = 70)
-    ax.xaxis.set_major_locator(mdates.MonthLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+    def weeks_since_start(date):
+        time_diff = date - START
+        weeks_diff = int(time_diff / np.timedelta64(1, 'W'))
+        return weeks_diff
 
-plot_wpm_over_time(data.sort_values(by=["date", "episode"]))
+    # Convert date to weeks since start
+    data_plot = data.copy()
+    data_plot = data_plot.sort_values("date").reset_index(drop=True)
+    data_plot["weeks"] = data_plot.date.transform(lambda dt: weeks_since_start(dt))
+    weeks = data_plot.weeks.unique()
+
+    # Calculate weekly increase
+    WPW = data_plot.groupby("weeks").WPE.sum()
+
+    # Perform linear regression with intercept = 0
+    weeks = np.array(weeks)
+    a, b, r, p, se = linregress(weeks, WPW)
+    rmse_lineair_wpw = mean_squared_error(WPW, weeks*a + b, squared=False)
+
+    plt.figure(figsize=figsize_inch)
+    plt.scatter(weeks, WPW)
+    plt.plot(weeks, weeks*a + b, c='r', label="$y = ax + b$ \n"+f"a = {a:.2f} [words-per-week]\nb = {b:.2f} [words]\nRMSE = {rmse_lineair_wpw:.2f}\n$R^2$  = {r**2:.2f}")
+    plt.legend(loc="upper left")
+    plt.xlabel("Weeks since start of podcast")
+    plt.ylabel("Released content per week [words]")
+    plt.ylim(0, 33000)
+    plt.title("The amount of content per week is steadily increasing")
+    return rmse_lineair_wpw
+
+rmse_lineair_wpw = plot_content(data)
 ```
 
+That's great! We are getting more and more content every week. But, I'm not quite content with the linear trend. It is a decent fit, but if we take a closer look at the data, it doesn't actually look like the rising trend is continuing after week 90, and it is not reasonable to expect the trend to keep rising given that the show appears to have settled into the new release schedule. Therefore, a logistic regression might be a better fit for this data:
+
 ```{python}
+#| label: fig-content_logistic
+#| fig-cap: "A Logistic-function fitted to the Words-per-week data. The lower RMSE and higher $R^2$ indicate that this is a better fit than the linear-regression. It indicates that the initial release rate was around 8500 WPW, and it has increased to almost 22100 WPW."
+
+def plot_content_logistic(data):
+    def weeks_since_start(date):
+        time_diff = date - data.iloc[0].date
+        weeks_diff = int(time_diff / np.timedelta64(1, 'W'))
+        return weeks_diff
+    
+    def logifunc(x,A,x0,k,off):
+        return A / (1 + np.exp(-k*(x-x0)))+off
+
+    def r_squared(y, y_pred):
+        y, y_pred = np.array(y), np.array(y_pred)
+        return 1 - np.sum((y - y_pred)**2)/np.sum((y - np.mean(y))**2)
+
+    # Convert date to weeks since start
+    data_plot = data.copy()
+    data_plot = data_plot.sort_values("date")
+    data_plot["weeks"] = data_plot.date.transform(lambda dt: weeks_since_start(dt))
+    weeks = data_plot.weeks.unique()
+
+    # Calculate weekly increase
+    WPW = data_plot.groupby("weeks").WPE.sum()
+
+    # Fit logistic
+    popt, pcov = curve_fit(logifunc, weeks, WPW, p0=[25000,60,0.1, 5000])
+    rmse_logistic_wpw = mean_squared_error(WPW, logifunc(weeks, *popt), squared=False)
+    r_logistic_wpw = r_squared(WPW, logifunc(weeks, *popt))
+
+    # Perform linear regression with intercept = 0
+    plt.figure(figsize=figsize_inch)
+    plt.scatter(weeks, WPW)
+    plt.plot(weeks, logifunc(weeks, *popt), 'r-',label=f'Fitted Parameters {[round(p,1) for p in popt]}\nStarting-level={popt[3]:.1f}\nEnding-level ={popt[3]+popt[0]:.1f} \nRMSE={rmse_logistic_wpw:.2f}\n $R^2$ = {r_logistic_wpw:.2f}')
+    plt.legend(loc="upper left")
+    plt.xlabel("Weeks since start of podcast")
+    plt.ylabel("Released content per week [words]")
+    plt.title("The amount of content per week has almost tripled since the start of the podcast!")
+    plt.ylim(0, 33000)
+    plt.show()
+    return mean_squared_error(WPW, logifunc(weeks, *popt), squared=False)
+
+
+rmse_logistic_wpw = plot_content_logistic(data)
+```
+
+Yes! This looks more reasonable. The content amount of content we are getting per week from Maarten and Tom has almost tripled since the podcast started. 
+
+```{python}
+#| output: asis
+#| echo: false
+print(f"So this podcast already has a lot of content, and we are getting a lot more every week. The total amount of content released is so far is {data.WPE.sum():.0f} words. To listen to all this content takes {data['duration-m'].sum()/60:.0f} hours.")
+```
+It's not only a lot of fun that we have such an impressive amount of content, it is supposedly also very helpfull for a lot of people. A funny anecdote we hear a lot about this podcast is that it is great for people who suffer from insomnia, as it helps them fall asleep. There might be a few factors at play as to why this is:
+
+1. Maarten has a very low and calming voice.
+3. There are hardly any distracting sounds or loud noises.
+3. Maarten and Tom have calm conversations.
+4. Maarten and talk with a consistent energy.
+
+I feel like everybody would agree on these 4 points, but with the data I collected, we can attempt to verify points 3 and 4 with our data-driven approach.
+
+| Content-type | Words-per-Minute                                                                     |
+|--------------|:------------------------------------------------------------------------------------:|
+|Presentation  | Between 100 – 150 wpm for a comfortable pace                                      |
+|Conversational| Between 120 – 150 wpm                                                                |
+|Audiobooks	   | Between 150 – 160 wpm (upper range that people comfortably hear & vocalize words)    |
+|Radio-shows & Podcasts  | Between 150 – 160 wpm                                                 |
+|Auctioneers   | Can speak at about 250 wpm                                                           |
+|Commentators  | Between 250- 400 wpm                                                                 |
+
+: Typical speech rate per content type (source: [improvepodcast](https://improvepodcast.com/words-per-minute/)) {#tbl-talkingspeed}
+
+@tbl-talkingspeed shows us the typical words-per-minute for several types of audio-content. I couldn't find a better source than the one provided (This same table is used on multiple websites without any citations.). However, I could verify the Audibooks/Podcast rate: according to [Guidelines for the Use of Multimedia in Instruction](https://journals.sagepub.com/doi/abs/10.1177/154193129804202019) audiobooks are recommended to be at 150–160 WPM, as this is the upper-range within people comfortably hear and vocalize words, just as the table says.
+
+So in order to very hypothesis 3 and 4, let's continue our analysis!
+
+# 'Uitslapen' - Stay well rested like Maarten by listening to this Podcast
+## Do Maarten and Tom talk fast for a podcast?
+Luckily for us, calculating the average speech rate is rather trivial. We can just devide the number of words in the episode by the duration. This gives us one value per episode, and doing this for all episodes once again gives us a nice statistical distribution:
+
+```{python}
+#| label: fig-wpm_norm
+#| fig-cap: "The speech rate is nicely approximated by a normal distribution. The average speech rate per episode is 164 Words-per-Minute, just above the 150-160 WPM range recommended for podcasting. 95% of the episodes lie between the range 144-184 WPM."
+
+data["WPM"] = data["WPE"]/data["duration-m"]
+
 def plot_wpm_histogram(data):
     """
     Plot histogram of Words-per-Minute distribution
@@ -544,28 +607,224 @@ def plot_wpm_histogram(data):
     data : pd.DataFrame
         Information about the episodes.
     """    
+    # Fit normal distribution
+    params = norm.fit(data["WPM"])
+    x = np.linspace(data["WPM"].min() - 10, data["WPM"].max() + 10, 100)
+    norm_fitted = norm.pdf(x, *params)
+
+    # Plot figure
     fig, ax = plt.subplots(figsize=figsize_inch)
     plt.title("Distribution of Words-per-Minute")
-    ax.hist(data["WPM"], bins=30, density=True, edgecolor="#EAEAF2", linewidth=1)
+    ax.hist(data["WPM"], bins=15, density=True, edgecolor="#EAEAF2", linewidth=1)
+    ax.plot(x, norm_fitted, label = "Normal Distribution:\n"+r"  - $\mu$ = "+f"{round(params[0],2)}\n  - $\sigma$ = {round(params[1],2)}")
     ax.set_xlabel("Words per minute (words/minute)")
     ax.set_ylabel("Probability Density")
     plt.xticks(rotation = 70)
-plot_wpm_histogram(data)
+    plt.legend()
+    plt.show()
+    return params
+params = plot_wpm_histogram(data)
 ```
-# 'An image is worth 300 words' - Statistics on the words used {#sec-wordclouds}
-Which words, excluding stopwords (de, het een, deze, die, zij, zijn, etc.). 
+Thats interesting! As shown in @fig-wpm_norm, on average Maarten and Tom talk slightly faster than the talking rate recommended for full listener comprehension.
 
-## Including common stopwords
+This result suprised me. I expected the speech rate to fall nicely within this range. I couldn't find a source for dutch speaking, maybe the upper-range is dependent on the language? I did some more searching and came across this interesting publication [A comparative analysis of speech rate and perception in radio bulletins](https://emmarodero.com/researcher/projects/speech-rate/#publications) which states that the averge conversational speech rate for English is between 150-190 WPM, and the average speech rate for BBC radio is 167 WPM. Meanwhile, the speech rate for Radio Nacional de España (RNE) was 210 WPM. So the podcast speech rate is slightly slower than the BBC, which I would also characterize as a calm radio station. 
+
+In order to have some sense of a Dutch reference, I also processed the most popular Dutch podcast episode today as listed by Spotify: _"Geuze & Gorgels - season 2 episode 47 - Pretty Hurts"_. This episode has a speech rate of 207 WPM. As this single episode has a higher rate than all processed episodes for the _'Maarten van Rossum podcast'_, I does give me confidence that Maarten and Tom really have a calm speech rate.
+
+Let's move on to our next hypothesis: 'Maarten and talk in a consistent ritme.', to see if we can elucidate this subject some more.
+
+## Maarten and Tom keep the talking rate very consistent throughout the episode
+analysing this is a bit more difficult to answer, but it is certainly possible. Luckily for us `Whisper` also creates subtitle files for each processed episode (.srt, .vtt). We can process these to devide the text of each episode into minutes, so we can estimate the speech rate per minute. 
+By doing this, we can estimate the speech rate distribution per episode, and plot this result as ranges per episode:
+
 ```{python}
-full_text = " ".join(data_eps["text"])
+#| label: fig-wpm_time_range
+#| fig-cap: "Using the .srt (subtitle) files generated by Whisper, we are able to analyse the spread of the WPM per minute. For symmetric distributions the Highest Probability Density is the same as the mean, but for skewed distributions such as the lognormal, this value tends to be smaller than the mean and is a bit more representative for the most likely value. We can see that the episodes remain between 140-200 WPM for the most part."
+
+def parse_srt(row):
+    path = row.txt_path.replace("txt", "srt")
+    srt = read_txt_file(path).split("\n")
+
+    # The srt has a standard formatting:
+    # 1. Line number
+    # 2. Content
+    # 3. Timestamp
+    # Followed by a blank line
+    lines, timestamps, sentences = [], [], []
+    i = 0
+    while i < len(srt)-1:
+        lines.append(srt[i])
+        timestamps.append(srt[i+1])
+        sentences.append(srt[i+2])
+        i += 4    
+    
+    # Get length of sentence
+    srt = pd.DataFrame({"lines":lines, "sentences":sentences, "timestamps":timestamps}) 
+    temp = srt["timestamps"].str.split("-->", n = 1, expand = True)
+    srt["time_start"] = temp[0]
+    srt["time_start"] = srt["time_start"].str.replace(",",".")
+    srt["time_end"] = temp[1]
+    srt["time_end"] = srt["time_end"].str.replace(",",".")
+    srt["time_start"] = pd.to_timedelta(srt.time_start)
+    srt = srt.drop(columns="timestamps")
+    srt["time_end"] = pd.to_timedelta(srt.time_end)
+    srt["duration"] = pd.to_timedelta(srt["time_end"] - srt["time_start"]).dt.total_seconds()
+
+    # Get cadence of episode 
+    srt["length"] = srt["sentences"].transform(lambda text: get_length(text))
+    
+    # Aggregate per minute
+    srt["minute"] = (srt.time_end.dt.total_seconds()//60).astype("int")
+    srt = srt.groupby("minute").agg(
+        {"sentences":" ".join,
+         "duration":"sum",
+         "length":"sum"}
+    )
+    srt["WPM_line"] = srt["length"]/srt["duration"]*60 
+    srt = srt.reset_index()
+    srt["episode"] = path
+    srt["date"] = row.date
+    srt["titles"] = row.titles
+
+    # We drop the last minute as it contains the outro and adds.
+    # We also drop the first minute, as it contains the intro
+    srt = srt[1:-1]
+    # In a few files, Whisper had trouble picking up the audio.
+    # Only transcribing 1 line for more than a minute.
+    # To filter these bad lines out, we remove any minute with less than 90 words.and
+    # Also, in some episodes they listen to historic speeches, which are quite slow.
+    # We filter these 'bad'-lines out by setting a lower limit of 100 WPM
+    # This is not a problem, as it is far below even the lower bound of the speech rate.
+    srt = srt[srt.WPM_line >= 100]
+    return srt
+
+def plot_srts_wpm(srts):
+    ci_60 = []
+    ci_90 = []
+    hpd = []
+    date = []
+    for df in srts:
+        # Calculate the data confidence interval
+        kde = KDEUnivariate(df.WPM_line)
+        kde.fit(bw=5)
+        icdf = kde.icdf
+        confidence_interval = (np.percentile(icdf, 20), np.percentile(icdf, 80))
+        ci_60.append(confidence_interval)
+        confidence_interval = (np.percentile(icdf, 5), np.percentile(icdf, 95))
+        ci_90.append(confidence_interval)
+        hpd.append(kde.support[np.argmax(kde.density)])
+        date.append(df.date[1])
+    ci_60 = np.array(ci_60)
+    ci_90 = np.array(ci_90)
+
+    fig, ax = plt.subplots(figsize=figsize_inch)
+    plt.plot(date, hpd, alpha=0.5, color="k", label="Highest Probability Density WPM")
+    plt.fill_between(date, ci_90[:,0], ci_90[:,1], color="#1f77b4", linewidth = 0, alpha=0.3, label=r"90% interval WPM")
+    plt.fill_between(date, ci_60[:,0], ci_60[:,1], color="#1f77b4", linewidth = 0, alpha=0.5, label=r"60% interval WPM")
+
+    plt.xlabel("Episode #")
+    plt.ylabel("Words-per-Minute")
+    plt.title("Confidence Interval of WPM_lines")
+    plt.legend()
+    plt.xticks(rotation = 70)
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+    plt.show()
+    return ci_90, hpd
+
+srts = []
+for _, row in data.iterrows():
+    srt = parse_srt(row)
+    srts.append(srt)
+ci_90, hpd = plot_srts_wpm(srts)
+```
+It is fun to see that @fig-wpe_time and @fig-wpm_time_range show a similair change in episode structure. The earlier episodes had a speech rate almost 20 wpm faster than more recent episodes. Other than that, we can see that episodes stay within the range of 150-180 WPM, with a very small percentage going above 200 wpm. #TODO
+
+```{python}
+#| label: fig-wpm_time_range_weekdays
+#|fig-cap: "Grouping these episodes by the respective day of the week, we can see a pattern emerge. Tuesday episodes tend to be the slowest, while Monday and Saturday episodes tend to be the fastest. Wednesday episodes have the smallest spread thus appear to be the most consistent, while also being fairly slow. Thus Tuesday and Wednesday episodes are perhaps the best choice for those trying to sleep."
+
+def plot_srts_wpm_weekly(srts):
+    # plot per day of week
+    df_weekday = pd.concat(srts)
+    df_weekday["weekday"] = df_weekday.date.transform(lambda x: x.weekday())
+
+    ci_60 = []
+    ci_90 = []
+    hpd = []
+    weekdays = []
+    number_to_week = {1:"Monday", 2:"Tuesday", 3:"Wednesday", 4:"Thursday", 5:"Friday", 6:"Saturday", 7:"Sunday"}
+    for i in range(7):
+        weekday = number_to_week[i+1]
+        df = df_weekday[df_weekday.weekday == i]
+        # Calculate the data confidence interval
+        kde = KDEUnivariate(df.WPM_line)
+        kde.fit(bw=6)
+        icdf = kde.icdf
+        confidence_interval = (np.percentile(icdf, 20), np.percentile(icdf, 80))
+        ci_60.append(confidence_interval)
+        confidence_interval = (np.percentile(icdf, 5), np.percentile(icdf, 95))
+        ci_90.append(confidence_interval)
+        hpd.append(kde.support[np.argmax(kde.density)])
+        weekdays.append(weekday)
+
+    ci_60 = np.array(ci_60)
+    ci_90 = np.array(ci_90)
+
+    # Set horizontal labels
+    labels = df_weekday.groupby("weekday").agg({"weekday": lambda x: x.iloc[0], "episode":pd.Series.nunique})
+    labels["label"] = labels.agg(lambda row: f"{number_to_week[row.weekday+1]}\n{row.episode} episodes", axis=1)
+
+    fig, ax = plt.subplots(figsize=figsize_inch)
+    plt.plot(weekdays, hpd, alpha=0.5, color="k", label="Highest Probability Density WPM")
+    plt.fill_between(weekdays, ci_90[:,0], ci_90[:,1], color="#1f77b4", linewidth = 0, alpha=0.3, label=r"90% interval WPM")
+    plt.fill_between(weekdays, ci_60[:,0], ci_60[:,1], color="#1f77b4", linewidth = 0, alpha=0.5, label=r"60% interval WPM")
+    plt.xlabel("Weekday")
+    plt.ylabel("Words-per-Minute")
+    plt.title("Confidence Interval of WPM_lines")
+    plt.legend()
+    plt.gca().set_xticklabels(labels.label)
+    # plt.xticks(rotation = 70)
+    # ax.xaxis.set_major_locator(mdates.MonthLocator())
+    # ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+    plt.show()
+    return ci_90, hpd
+
+# Again, we only select the second half of the show
+srts_second_half = [srt for second, srt in zip((data["date"] > "2021-08-1"), srts) if second]
+ci_90, hpd = plot_srts_wpm_weekly(srts_second_half)
+```
+
+In @fig-wpm_time_range_weekdays a cool weekly pattern emerges. On Tuesday and Wednesday episodes are the slowest, while saturday episodes are clearly the fastest. Also, in general the spread shown in @fig-wpm_time_range_weekdays in @fig-wpm_time_range appears to be fairly narrow. 60% of the episodes stays within a 30 WPM band, and hardly ever do they go above 200 WPM.
+
+While part of me would like a more robust comparisson with some other data, I think we've gone far enough on this topic. If you have trouble sleeping, the data seems to agree that listening to this podcast might be an excellent choice. If you are interested in a curated playlist of the 'slowest' episodes, click on the cell below!
+
+::: {.callout-note collapse="true"}
+## The top 25 'slowest' episodes for helping you sleep
+```{python}
+#| echo: false
+playlist = data.sort_values("WPM").head(25)[print_cols+["WPM"]]
+playlist.to_html(index=False)
+```
+:::
+
+It's time to delve deeper into our data. Let's make use of all the text-data we've collected!
+
+# 'Nou natuurlijk beste mensen!' - are of course some of the favourite words of Maarten {#sec-wordclouds}
+Maarten has a typical way of speaking, you don't need any data to know this. Especially when he gets excited. As we have almost 200 hours of Maarten Talking, we can figure out what his most commonly used words are!
+
+```{python}
+#| label: fig-wordcloud_full
+#| fig-cap: "A wordcloud of the most common words in the podcast. The size of a word indicates the relative frequency. Since we didn't filter for stopwords, the wordcloud is filled with uninteresting words that are not specific for Maarten."
+full_text = " ".join(data["text"]).lower()
 path_wordcloud_full = "./cache/wordcloud_full.pickle"
+
 if not os.path.exists(path_wordcloud_full):
     # Generate a word cloud image
-    wordcloud_full = WordCloud(width=figsize[0], height=figsize[1], include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
+    wordcloud_full = WordCloud(width=figsize[0], height=figsize[1], include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=300).generate(full_text)
     write_pickle(path_wordcloud_full, wordcloud_full)
 else:
     wordcloud_full = read_pickle(path_wordcloud_full)
-
 
 # Display the generated image:
 # the matplotlib way:
@@ -575,21 +834,22 @@ plt.axis("off")
 plt.tight_layout()
 plt.show()
 ```
-
-## Excluding common stopwords
+Right.. this is not what we wanted. It is logical that these words appear a lot, but they don't have any interesting meaning. We need to filter out these words, called stopwords, to get a more interesting result.
 
 ```{python}
+#| label: fig-wordcloud_stopwords
+#| fig-cap: "A wordcloud of the most common words in the podcast. The size of a word indicates the relative frequency. We can see common words appear, which also indicate various topics Maarten and Tom talk about: Ukraine, politics, Trump, history. Take a look and see what you can spot and recognize!"
+
 # Create stopword list:
 stopwords_path = "../dependencies/dutch_stopwords.txt"
 with open(stopwords_path, "r") as f:
     dutch_stopwords = f.read().split("\n")
 dutch_stopwords = set(dutch_stopwords)
-```
 
-```{python}
+# Create improved wordcloud
 path_wordcloud_stopwords = "./cache/wordcloud_stopwords.pickle"
 if not os.path.exists(path_wordcloud_stopwords):
-    wordcloud_stopwords = WordCloud(stopwords=dutch_stopwords, width=figsize[0], height=figsize[1], include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=500).generate(full_text)
+    wordcloud_stopwords = WordCloud(stopwords=dutch_stopwords, width=figsize[0], height=figsize[1], include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=300).generate(full_text)
     write_pickle(path_wordcloud_stopwords, wordcloud_stopwords)
 else:
     wordcloud_stopwords = read_pickle(path_wordcloud_stopwords)
@@ -602,10 +862,10 @@ plt.tight_layout()
 plt.show()
 ```
 
-This is great as a creative expression of the words, but let's also look at the most common words in a table.
+That's more like it! It appears that Maarten uses the word 'Natuurlijk' a lot. Also, I can recognize the use of 'Mensen', 'Allemaal', and 'Helemaal' from some of the typical Maarten rants when he gets annoyed by something. There are also all kinds of topics hidden in the wordcloud. Take a look for yourself!
 
 ## Table of most common words
-
+While figures are always fine, it's also nice to look at the raw-data itself.
 ```{python}
 def get_top_n_words(data):
     """
@@ -634,12 +894,10 @@ def get_top_n_words(data):
     word_freq["Rate_per_Episode"] = round(word_freq["Count"]/data.shape[0],2)
     word_freq = word_freq[word_freq["Rate_per_Episode"]>=1]
     return word_freq, bag_of_words, vec
-```
 
-```{python}
 path_top_n_words = "./cache/top_n_words.pickle"
 if not os.path.exists(path_top_n_words):
-    word_freq, bag_of_words, vectorizer = get_top_n_words(data_eps)
+    word_freq, bag_of_words, vectorizer = get_top_n_words(data)
     package = [word_freq, bag_of_words, vectorizer]
     write_pickle(path_top_n_words, package)
 else:
@@ -649,6 +907,9 @@ pd.set_option('display.max_rows', word_freq.shape[0]+1)
 word_freq.iloc[:21].to_html(index=False)
 ```
 
+We knew 'Natuurlijk' was used a lot, but 32 times per episode, wow!
+I've collected all words used more than once per episode in the table below.
+
 ::: {.callout-note collapse="true"}
 ## Click here for the full table with Rate_per_Episode >= 1
 ```{python}
@@ -657,10 +918,12 @@ word_freq.to_html(index=False)
 ```
 :::
 
+As we noted above, some interesting topics arouse. I wonder, would it be possible to track some interesting topics over time? For example, I can't image Maarten and Tom talked a lot about Ukraine before the war, so we should be able to pick this up in the data.
 
-Let's attempt to track the use of "oekraïne" across episodes
+Let's attempt to track the use of "oekraïne" across episodes:
 ```{python}
-target_word = "oekraïne"
+#| label: fig-over_time_oekraine
+#| fig-cap: "In this figure we can clearly see the interest in the topic of the Ukraine take off in januari 2022. This demonstrates that we can track topics over time in the podcast."
 def plot_word_over_time(target_word):
     """
     Plot the frequency of the target word over time.
@@ -674,7 +937,7 @@ def plot_word_over_time(target_word):
     dist = bag_of_words[:,id].toarray().T[0]
 
     fig,ax = plt.subplots(figsize=figsize_inch)
-    plt.plot(data_eps["date"], dist)
+    plt.plot(data["date"], dist)
     plt.title(f"Mentions of the word: {target_word}")
     plt.ylabel("Counts")
     plt.xlabel("Date")
@@ -685,107 +948,70 @@ def plot_word_over_time(target_word):
     plt.xticks(rotation = 70)
     plt.show()
 
+target_word = "oekraïne"
 plot_word_over_time(target_word)
 ```
 
+@fig-over_time_oekraine demonstrates that we can indeed track topics over time.
+Let us try this for another topic:
 ```{python}
-plot_word_over_time("rutte")
-plot_word_over_time("vvd")
+#| label: fig-over_time_ggd
+#| fig-cap: "While less extreme than @fig-over_time_oekraine, we can clearly see our key event in the data."
+plot_word_over_time("ggd")
 ```
+As some of you may Remember, Maarten had a small run-in with the GGD and Hugo de Jonge were it was later revealed that Maarten was fully justified in his actions. As far as I know he never received an apalogy from Hugo... Anyways, this hole stint happened roughly halfway March 2021, and in @fig-over_time_ggd we see a big spike in the mentions of the GGD.
 
+So, we've demonstrated we can track news-worthy topics over time by mining our podcast. Can we go deeper? Yes, quite a bit in fact! In the next section we'll use some clever technique's to find out what this podcast is actually about.
 
-```{python}
-plot_word_over_time("bbb")
-```
+# 'Kunt u mij horen?' - What is 'Maarten van Rossem' the podcast actually about? {#sec-topic}
+Within the field of machine learning, there is the field of 'topic modeling'. Topic modeling tries to automatically extract abstract the abstract concept of topics from a collection of documents, and then asigns one or more topics to each document. So given a selection of documents, such as transcribed podcast episodes, we can use these unsupervised machine learning techniques to extract common topics from the various episodes. 
 
-# 'The talk of the town' - Topic Modeling on the Podcast! {#sec-topic}
-We used unsupervised Machine Learning to extract common topics from the various episodes. This part of the analysis is taken from [Maarten Grootendorst](https://towardsdatascience.com/using-whisper-and-bertopic-to-model-kurzgesagts-videos-7d8a63139bdf)
+This part of the analysis was largely inspired by the wonderful work of [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic) and his `BERTopic` topic modeling pipeline.
 
-Getting a topic per sentence is nice, but at the same time it is rather difficult to really distill a topic from a sentence. So instead we want to devide the blocks into slightly more meaningful chuncks. For this I rather arbitrarily devide the podcast into minutes. The question then is, how many sentences do we have per minute?
-Luckily, we can answer this with data we've already collected:
-
-```{python}
-#| output: asis
-
-words_per_sentence = []
-sentences_all = []
-for text in data["text"]:
-    sentences = sent_tokenize(text, language="dutch")
-    for sentence in sentences:
-        tokenized = tokenizer.tokenize(sentence)
-        sentences_all.append(sentence)
-        length = len(tokenized)
-        words_per_sentence.append(length)
-
-wps = np.array(words_per_sentence)
-# Filter out some processing bugs
-wps = wps[wps<500]
-wps = np.mean(wps)
-wpm = np.mean(data["WPM"])
-print(f"The number of sentences per minute is {round(wpm/wps,2)}")
-```
-So we opt to choose bundels of roughly 13 sentences as a topic
+Getting a topic per episode is nice, but if there is one thing I know about this podcast, it is that it can wildly swing off topic at any moment. So instead of getting a topic per sentence, it would be more interesting to get a topic per episode. And since we already wrote some code to chop the .srt files into minutes, this is actualy quite easy to do! The relatively short chunk of code below performs all the steps for extracting our topics.
 
 ```{python}
 # Sentencize the transcripts and track their titles
 docs = []
 titles = []
 timestamps = []
-for title, text, timestamp in zip(data["titles"], data["text"], data["date"]):
-    sentences = sent_tokenize(text, language="dutch")
-    n_chunks = len(sentences)//13
-    try:
-        chunks = np.array_split(sentences, n_chunks)  
-        for chunk in chunks:
-            chunk = str("\n ".join(chunk))
-            docs.append(chunk)
-            titles.append(title)
-            timestamps.append(timestamp)
+for srt in srts:
+    for text_minute in srt["sentences"]:
+        docs.append(text_minute)
+        titles.append(srt.titles.iloc[1])
+        timestamps.append(srt.date.iloc[1])
 
-    except ValueError:
-        chunks = "\n ".join(sentences)
-        chunk = chunks
-        docs.append(chunk)
-        titles.append(title)
-        timestamps.append(timestamp)
-
-    
-```
-
-```{python}
-
+# Create sentence embeddings for BERTopic
 embeddings_path = "./cache/embeddings.npy"
 if not os.path.exists(embeddings_path):
     # Create embeddings from the documents
     sentence_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
-
     embeddings = sentence_model.encode(docs)
     np.save(embeddings_path, embeddings)
 else:
     embeddings = np.load(embeddings_path)
-```
 
-```{python}
+# Train and save our BERTopic model
 model_path = "./cache/BERTopic_topic_model.pickle"
 if not os.path.exists(model_path):
     # Define sub-models
     sentence_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
     vectorizer = CountVectorizer(stop_words=dutch_stopwords)
     umap_model = UMAP(
-        n_neighbors=10, #Higher -> More global structure, less local
-        n_components=8, #Effects clustering mostly, advice is to leave around ~5
+        n_neighbors=20, #Higher -> More global structure, less local
+        n_components=7, #Effects clustering mostly, advice is to leave around ~5
         min_dist=0.0,
         metric='cosine',
         random_state=2112)
 
     hdbscan_model = HDBSCAN(
         min_cluster_size=15, #Higher -> less clusters, bigger size
-        min_samples=5, #Lower -> less outlier classifications, may be detrimental to quality topics.
+        min_samples=7, #Lower -> less outlier classifications, may be detrimental to quality topics.
         metric='euclidean', cluster_selection_method='eom')
 
     # Train our topic model
     topic_model = BERTopic(
-        n_gram_range=(1, 2),
+        n_gram_range=(1),
         min_topic_size=10,
         embedding_model=sentence_model,
         umap_model=umap_model,
@@ -802,11 +1028,14 @@ else:
 ```
 
 ## What topics does the model find?
+Our model has tried to assigned each minute of the podcast, to a topic, excluding the first and last minute of each episode. The top 10 most assigned topics are shown in the table below. The name of the topic is formed by selecting the top 4 words that appear a lot in the ontopic documents and very little in the offtopic documents:
 
 ```{python}
 topics = topic_model.get_topic_info()
 topics[1:10].to_html(index=False)
 ```
+Amazing! We can see that the model was able to find clearly interpretable topics, and they make a lot of sense. Maarten and Tom have talked a lot about the Ukraine and Russia, as well as Dutch politics, the polics of the USA, Covid-19, the Netherlands. I'm realy impressed with how well this works.
+
 ::: {.callout-note collapse="true"}
 ## Click here for all the topics identified by the model
 The first topic **-1** collects all documents, or in our case minutes, that could not be assigned to any particular topic. As you will see later in the visualization, these still cluster nicely around known topics, and using this their topic can often still be infered.
@@ -816,16 +1045,19 @@ topics.to_html(index=False)
 ```
 :::
 
-For the first 3 topics, the most representative minute of of the podcast is as follows:
+To demonstrate this further, we can check some of the classified minutes for the first 3 topics:
+
 ```{python}
 #| output: asis
-
 for topic_i in range(1, 4):
     print(f"The topic is defined by:  {topics.iloc[topic_i]['Name']}" + "\n")
     example = " ".join(topic_model.get_representative_docs()[topic_i-1])
     print(f"Representative minute of podcast:\n\n {example}" + "\n\n")
     print("----------------------------------------------------------\n\n")
 ```
+
+Yep, those fit really well! Something really cool we can do next is to visualize all these topics to also give you a sense of how they are all related.
+
 ::: {.callout-note collapse="true"}
 ## Click here for all the results up to topic 20
 ```{python}
@@ -841,8 +1073,12 @@ for topic_i in range(1, 21):
 :::
 
 ## How does the model think these are related?
+The following figure is really cool! Our model has assigned topics to our documents by performing clustering in the latent space of topics. In this latent space numbers are tied to topics, thus moving in one direction means you move towards a certain topic. Of course this is a very quic-and-dirty explanation, but this means that we can also visualize our documents in this fasion. Of course we cannot visualize 728 dimensions, the dimensionality of the latent space, so we map this into 2 dimensions. Now, this means you lose a lot of information. But, some structure is retained which means that topics that are closer together are more related, and topics that are far apart are less related. Enough talking, how about you explore this interactive figure yourself!
 
 ```{python}
+#| column: page 
+#| label: fig-topics_documents
+#| fig-cap: "Explore the latent embedding and clustering of documents yourself in this interactive figure!"
 # Generate nicer looking labels and set them in our model
 topic_labels = topic_model.generate_topic_labels(
     nr_words=3,
@@ -851,9 +1087,7 @@ topic_labels = topic_model.generate_topic_labels(
     separator=","
 )
 topic_model.set_topic_labels(topic_labels)
-```
 
-```{python}
 # Create reduced embeddings we can reuse for consistency
 reduced_embeddings_path = "./cache/reduced_embeddings.npy"
 if not os.path.exists(reduced_embeddings_path) or 1:
@@ -862,10 +1096,6 @@ if not os.path.exists(reduced_embeddings_path) or 1:
     np.save(reduced_embeddings_path, reduced_embeddings)
 else:
     reduced_embeddings = np.load(reduced_embeddings_path)
-```
-
-```{python}
-#| column: page 
 
 # Manually selected some interesting topics to prevent information overload
 topics_of_interest = list(range(0,100))
@@ -886,26 +1116,46 @@ topic_model.visualize_documents(
 )
 ```
 
+There are some clear regions in the figure, such as:
 
-## How are the topics related in an hierarchical sense?
+* lower left: Various types of media
+* center bottom: Politics and Elections
+* center right: Wars, from historic to present day
+* upper right (below Taiwan): Climate, energie, nitrogen-crisis
+* center top: Technology
+* center top (below Technology): Transportation
+
+So this has also given us a pretty nice overview of the main topics of the podcast are:
+
+* Dutch politics
+* American Politics
+* China
+* Technology and Science
+* The History of Technology and Science
+* Traveling
+* Media
+* World War I, World War II, Cold War
+
+Another interesting property we can investigate is how all the topics are related in a hierarchical sense. Once again we can see quite some logical patterns popping up along the way:
+
 ```{python}
-#| output: false 
-hierarchical_topics = topic_model.hierarchical_topics(docs)
-```
-```{python}
+#| label: fig-topics_hierarchy
+#| fig-cap: "This cluster hierarchy plot visualizes how the various topics are related. The shorter you have to travel to the right before topics merge, the closer related they are according to the model."
 #| column: page
+hierarchical_topics = topic_model.hierarchical_topics(docs)
+
 topic_model.visualize_hierarchy(
     hierarchical_topics=hierarchical_topics, 
-    color_threshold=1.3,
     width = figsize[0],
     height = figsize[1]
 )
 ```
-If you hover over the black circles, you will see the topic representation at that level of the hierarchy. These representations help you understand the effect of merging certain topics together. Some might be logical to merge whilst others might not. Moreover, we can now see which sub-topics can be found within certain larger themes.
 
-## How are the hierarchical topics related semanticly?
+If you hover over the black circles, you will see the topic representation at that level of the hierarchy. These representations help you understand the effect of merging certain topics together. Some might be logical to merge whilst others might not. Moreover, we can now more clearly see which sub-topics can be found and how they are related in the larger scheme of things.
 
 ```{python}
+#| label: fig-topics_document_and_hierarchy
+#| fig-cap: "This figure combines the document topic visualization and the hierarchical visualization. This figure doesn't have a hover over as this add a lot to the filesize of this document."
 #| column: page 
 topic_model.visualize_hierarchical_documents(
     docs, 
@@ -916,9 +1166,15 @@ topic_model.visualize_hierarchical_documents(
 )
 ```
 
+@fig-topics_document_and_hierarchy combines @fig-topics_documents and @fig-topics_hierarchy into a single figure. Showing us the what the hierarchical clustering looks like in the 2 dimensional representation.
+
 ## How are the top 10 topics distributed over time?
 
 ```{python}
+#| column: page 
+#| label: fig-topic_per_week_over_time
+#| fig-cap: "The top 12 most occuring topics of the podcast as visualized over time. We can see several big events in the data, such as the presidential elections in the USA in 2020, the invasion of Ukraine in 2022, and the farmers protests in the summer of 2022."
+
 def topics_over_time_weeks(topic_model,
                          docs: List[str],
                          timestamps: Union[List[str],
@@ -946,7 +1202,7 @@ def topics_over_time_weeks(topic_model,
                         inferred. If it is a list of ints, then the documents will be ordered by
                         ascending order.
             binsize:    The binsize you want to create for the timestamps. 
-                        The binsize is given in number  of weaks, the default is 2.
+                        The binsize is given in number of weeks, the default is 2.
             datetime_format: The datetime format of the timestamps if they are strings, eg “%d/%m/%Y”.
                              Set this to None if you want to have it automatically detect the format.
                              See strftime documentation for more information on choices:
@@ -1007,8 +1263,10 @@ def topics_over_time_weeks(topic_model,
 
             # Calculate c-TF-IDF representation for a specific timestamp
             selection = documents.loc[documents.Timestamps == timestamp, :]
-            documents_per_topic = selection.groupby(['Topic'], as_index=False).agg({'Document': ' '.join,
-                                                                                    "Timestamps": "count"})
+            documents_per_topic = selection.groupby(['Topic'], as_index=False).agg(
+                {"Document": " ".join,
+                 "Timestamps": "count"}
+                 )
             c_tf_idf, words = topic_model._c_tf_idf(documents_per_topic, fit=False)
 
             if global_tuning or evolution_tuning:
@@ -1050,9 +1308,7 @@ def topics_over_time_weeks(topic_model,
                 previous_c_tf_idf = c_tf_idf.copy()
 
         return pd.DataFrame(topics_over_time, columns=["Topic", "Words", "Frequency", "Timestamp"])
-```
 
-```{python}
 def stacked_area_chart_topics(topic_model,
                                topics_over_time: pd.DataFrame,
                                top_n_topics: int = 10,
@@ -1075,8 +1331,8 @@ def stacked_area_chart_topics(topic_model,
     Returns:
         A plotly.graph_objects.Figure including all traces
     """
-    colors = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#D55E00", "#0072B2", "#CC79A7"]
-
+    colors = (plt.cm.tab20(np.linspace(0, 1, 20)))
+    colors = [rgb2hex(color) for color in colors]
     # Select topics based on top_n and topics args
     freq_df = topic_model.get_topic_freq()
     freq_df = freq_df.loc[freq_df.Topic != -1, :]
@@ -1106,7 +1362,7 @@ def stacked_area_chart_topics(topic_model,
         if index == 0:
             fig.add_trace(go.Scatter(x=trace_data.Timestamp, y=y,
                                     mode='lines',
-                                    # marker_color=colors[index % 7],
+                                    line={"color":colors[index]},
                                     hoverinfo="text",
                                     name=topic_name,
                                     stackgroup="one",
@@ -1115,7 +1371,7 @@ def stacked_area_chart_topics(topic_model,
         else:
             fig.add_trace(go.Scatter(x=trace_data.Timestamp, y=y,
                             mode='lines',
-                            # marker_color=colors[index % 7],
+                            line={"color":colors[index]},
                             hoverinfo="text",
                             name=topic_name,
                             stackgroup='one',
@@ -1157,18 +1413,9 @@ def stacked_area_chart_topics(topic_model,
     )
     return fig
 
-```
-
-```{python}
-#| column: page 
-#| label: fig-t_over_time
-#| fig-cap: "The most occuring topics of the podcast as visualized over time. We can see several big events in the data, such as the presidential elections in the USA in 2020, the invasion of Ukraine in 2022, and the farmers protests in the summer of 2022."
 binsize = 2
 topics_over_time = topics_over_time_weeks(topic_model, docs, timestamps, binsize=binsize)
-stacked_area_chart_topics(topic_model, topics_over_time, top_n_topics=13)
+stacked_area_chart_topics(topic_model, topics_over_time, top_n_topics=12)
 ```
 
-# What is the episode that is most consistent to a single topic?
-We may need to consider hierarchical clustering to find the correct answer to this question, or we could use our Umap to find the episode with the lowest RMS to the average embedding. Something like that could help.
-
-# What is the episode that is the least consistent to a topic
+We end it here with @fig-topic_per_week_over_time
