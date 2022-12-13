@@ -187,6 +187,8 @@ Great! But hold on, that's not quite right... I thought we were on something lik
 The reason for all the extra episodes is that the podcast-channel also includes specials, trailers, and the likes:
 
 ```{python}
+data_full = data.copy()
+
 is_ep = (data.is_episode==True)
 data[~is_ep][print_cols].to_html(index=False)
 ```
@@ -196,13 +198,14 @@ For our analysis, it is better to ignore these specials, as they are not represe
 ```{python}
 #| output: asis
 #| echo: false
-data_full = data.copy()
 
 # The standard dataframe will only contain the numbered episodes from now on
-data = data[is_ep].reset_index(drop=True)
+data = data_full[is_ep].reset_index(drop=True)
 num_episodes = data.shape[0]
-print(f"{num_episodes} episodes.")
+print(f"We have {num_episodes} episodes.")
+print(f"However, the latest episode is {data.episode.max()}")
 ```
+We are missing 1 episode, episode _'#116 - Joe Biden: 1 jaar'_ as this is the only episode that was released exclusively for paid subscribers to the podcast.
 
 The collapsible cell below is something you'll encounter more often in this article. It's a convenient way for us to put interesting results into the file, while making sure we don't create massive clutter in the process.
 
@@ -225,6 +228,7 @@ So the first episode was released on the 7th of June 2020. This means, that the 
 
 ```{python}
 #| output: asis
+#| echo: false 
 days_running = (max(data.date) - min(data.date)).days
 print(f"{days_running} days.")
 ```
@@ -433,7 +437,7 @@ The Lognormal distribution succesfully models problems such as:
 
 So perhaps we can add to these lists:
 
-* the words-per-episode for the 'Maarten van Rossum' podcast 
+* the words-per-episode for the 'Maarten van Rossem' podcast 
 
 ::: {.callout-note collapse="true"}
 ## The statistics of the statistical distributions above.
@@ -627,9 +631,9 @@ params = plot_wpm_histogram(data)
 ```
 Thats interesting! As shown in @fig-wpm_norm, on average Maarten and Tom talk slightly faster than the talking rate recommended for full listener comprehension.
 
-This result suprised me. I expected the speech rate to fall nicely within this range. I couldn't find a source for dutch speaking, maybe the upper-range is dependent on the language? I did some more searching and came across this interesting publication [A comparative analysis of speech rate and perception in radio bulletins](https://emmarodero.com/researcher/projects/speech-rate/#publications) which states that the averge conversational speech rate for English is between 150-190 WPM, and the average speech rate for BBC radio is 167 WPM. Meanwhile, the speech rate for Radio Nacional de España (RNE) was 210 WPM. So the podcast speech rate is slightly slower than the BBC, which I would also characterize as a calm radio station. 
+This result suprised me. I expected the speech rate to fall nicely within this range. I couldn't find a source for dutch speaking, maybe the upper-range is dependent on the language? I did some more searching and came across this interesting publication [A comparative analysis of speech rate and perception in radio bulletins](https://emmarodero.com/researcher/projects/speech-rate/#publications) which states that the averge conversational speech rate for English is between 150-190 WPM, and the average speech rate for BBC radio is 167 WPM. Meanwhile, the speech rate for Radio Nacional de España (RNE) was 210 WPM. So the podcast speech rate is slightly slower than the BBC, which I would also typically characterize as a calm radio station. Also, it would be good to note that audiobooks also tend to be a lot calmer than regular conversations, so having a speech rate slightly faster than recommended for audibooks is probably still very calm.
 
-In order to have some sense of a Dutch reference, I also processed the most popular Dutch podcast episode today as listed by Spotify: _"Geuze & Gorgels - season 2 episode 47 - Pretty Hurts"_. This episode has a speech rate of 207 WPM. As this single episode has a higher rate than all processed episodes for the _'Maarten van Rossum podcast'_, I does give me confidence that Maarten and Tom really have a calm speech rate.
+In order to have some sense of a Dutch reference, I also processed the most popular Dutch podcast episode today as listed by Spotify: _"Geuze & Gorgels - season 2 episode 47 - Pretty Hurts"_. This episode has a speech rate of 207 WPM. As this single episode has a higher rate than all processed episodes for the _'Maarten van Rossem - De Podcast'_ podcast, I does give me confidence that Maarten and Tom really have a calm speech rate.
 
 Let's move on to our next hypothesis: 'Maarten and talk in a consistent ritme.', to see if we can elucidate this subject some more.
 
@@ -963,7 +967,7 @@ As some of you may Remember, Maarten had a small run-in with the GGD and Hugo de
 
 So, we've demonstrated we can track news-worthy topics over time by mining our podcast. Can we go deeper? Yes, quite a bit in fact! In the next section we'll use some clever technique's to find out what this podcast is actually about.
 
-# 'Kunt u mij horen?' - What is 'Maarten van Rossem' the podcast actually about? {#sec-topic}
+# 'Kunt u mij horen?' - What is 'Maarten van Rossem - De Podcast' actually about? {#sec-topic}
 Within the field of machine learning, there is the field of 'topic modeling'. Topic modeling tries to automatically extract abstract the abstract concept of topics from a collection of documents, and then asigns one or more topics to each document. So given a selection of documents, such as transcribed podcast episodes, we can use these unsupervised machine learning techniques to extract common topics from the various episodes. 
 
 This part of the analysis was largely inspired by the wonderful work of [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic) and his `BERTopic` topic modeling pipeline.
