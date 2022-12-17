@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# This script is used to process al the audio-files in the '../data/audio' directory
+# This script is used to process all the episodes in the '../data/audio' directory
+# that were found to be incomplete and have been re-downloaded
 # into text files in the '../data/text' directory 
 current_dir=$(pwd)
 cd ../data/audio
