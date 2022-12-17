@@ -1,5 +1,5 @@
 ---
-title: "'Maarten van Rossem - De Podcast' - #315 Textanalysis of the podcast"
+title: "'Maarten van Rossem - De Podcast' - #330 Textanalysis of the podcast"
 author: "Alex van Vorstenbosch"
 date: today
 abstract: "De 'Maarten van Rossem'-podcast is one of the most popular podcasts in The Netherlands, which has produced more than 300 episodes in the past 2 years. In this article, we produce some fun, and hopefully interesting, statistics about the podcast. This is done by collecting all the currently available podcasts from the web, and transcribing them using the newly available `Whisper` automated speech recognition model by [OpenAI](https://github.com/openai/whisper). After some initial statistical analysis of the podcast, finish our analysis by extracting topics from podcast using `BERTopic`, a Topic Modeling pipeline by [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic). The goal of this project is first of all to have fun analysing the words of Maarten and Tom. I hope you'll learn something interesting from all this, and that you have fun along the way. (And I hope that Maarten and Tom would mention this project in the podcast!)"
@@ -55,7 +55,10 @@ from matplotlib.colors import rgb2hex
 import plotly.graph_objects as go
 
 # Set the random seed for reproducability
-np.random.seed(2112)
+import random
+random_seed = 2112
+random.seed(random_seed)
+np.random.seed(random_seed)
 
 # Set plotting settings
 plt.style.use('seaborn-darkgrid')
@@ -119,7 +122,7 @@ def read_pickle(path):
     Returns
     -------
     any unpickled object(s)
-    """    
+    """
     with open(path, 'rb') as f:
         object = pickle.load(f)
     return object
@@ -138,7 +141,6 @@ def read_txt_file(path):
     text : str
         contents of the file
     """    
-
     if not os.path.exists(path):
         return np.nan
 
@@ -169,7 +171,7 @@ data["is_episode"] = data["episode"].transform(lambda num: num > 0)
 
 print_cols = ["titles", "date", "duration", "episode"]
 pd.set_option('display.max_colwidth', 40)
-data.head(3)
+data.tail(3)
 ```
 
 # 'Goed Nieuws' - There is always a new episode around the corner {#sec-statistics}
@@ -189,6 +191,7 @@ The reason for all the extra episodes is that the podcast-channel also includes 
 ```{python}
 data_full = data.copy()
 
+# create a simple mask for getting only the numbered episodes
 is_ep = (data.is_episode==True)
 data[~is_ep][print_cols].to_html(index=False)
 ```
@@ -233,19 +236,17 @@ days_running = (max(data.date) - min(data.date)).days
 print(f"{days_running} days.")
 ```
 
-For the loyal listeners, that's good new! As we have 322 episodes at the time of writing.
-
 ```{python}
 #| output: asis
 #| echo: false
 mean_time_between_episodes = days_running/num_episodes
-print(f"It means that the average waiting time for a new episode is only {mean_time_between_episodes:.2f} days! That is more than {7/mean_time_between_episodes:.0f} episodes per week, wow!")
+print(f"For the loyal listeners, that's good new! As we have {data.episode.max()} episodes at the time of writing. It means that the average waiting time for a new episode is only {mean_time_between_episodes:.2f} days! That is more than {7/mean_time_between_episodes:.0f} episodes per week over the span of 2 years, wow!")
 ```
 
-It does probably help that Maarten and Tom can talk about pretty much anything, given that they are both a history and a current affairs podcast. However, releasing many episodes doesn't mean a lot if there is only little content in each episode. Now, I feel quite satisfied with amount of content released by Maarten and Tom, but perhaps we can quantify it? I wonder how much talking they actually do per episode? Let's find out in the next section!
+It does probably help that Maarten and Tom can talk about pretty much anything, given that they are both a history and a current affairs podcast. However, releasing many episodes doesn't mean a lot if there is only little content in each episode. Now, I personally am very satisfied with amount of content released by Maarten and Tom, but perhaps we can quantify it? I wonder how much talking they actually do per episode? Let's find out in the next section!
 
 # 'Beste mensen' - The rate at which content is being released has tripled!
-Let's slowly start wading a little deeper into our sea of data:  'the contents of the episodes'. I've used the [`Whisper`](https://github.com/openai/whisper) deep neural network model to transcribe all the episodes of the podcast into documents. It's really quite perplexing how well this works. It took about 3 days of GPU time to transcribe all episodes of the podcast. Luckily for me, it was a rather cold weekend, so I could use these calculations the heat my appartement a little.
+Let's slowly start wading a little deeper into our sea of data:  'the contents of the episodes'. I've used the [`Whisper`](https://github.com/openai/whisper) deep neural network model to transcribe all the episodes of the podcast into written text documents. It's really quite perplexing how well this works. It took about 3 days of GPU time to transcribe all episodes of the podcast. Luckily for me, it was a rather cold weekend, so I could use these calculations the heat my appartement a little.
 If you have some experience with Python and/or the commandline, it's possible to run the software on pretty much any computer, so I would advice you to see for yourself how good the results are. 
 
 ::: {.callout-caution}
@@ -261,28 +262,30 @@ This is something you will see more often in this analysis. My interpretation of
 :::
 
 ## How much content is there in each episode?
-Content is hard to measure, so we just take the number of words spoken as a proxy for the content of each episode. This is easily visualised with a histogram.
+We could have a long discussion on what we consider to be content and how we want to measure it. Content as an abstract concept is hard to measure, so we just take the number of words spoken as a proxy for the content of each episode. This is easily understandable to anybody, has a clear and direct link to 'content', and best of all: this is easily visualised with a histogram!
 ```{python}
 #| label: fig-wpe_dist
 #| fig-cap: The distribution of Words-per-Episode for all the content released as part of the podcast
-tokenizer = RegexpTokenizer(r'\w+')
+tokenizer = RegexpTokenizer(r"\w+")
+
 
 def get_length(text):
     """
-    Calculates length of text by counting the number of tokens.
+    Calculates length of a text by counting the number of tokens.
 
     Parameters
     ----------
     text : str
         Text to process.
-    
+
     Returns
-    -------   
-    _ : int 
-        Length of text. 
+    -------
+    _ : int
+        Length of text.
     """
     tokens = tokenizer.tokenize(text)
-    return(len(tokens))
+    return len(tokens)
+
 
 # Words-per-Episode
 data["WPE"] = data["text"].transform(lambda text: get_length(text))
@@ -291,7 +294,7 @@ data_full["WPE"] = data_full["text"].transform(lambda text: get_length(text))
 
 def plot_lengths_histogram(data, title, bins=12):
     """
-    Plot the distribution of episode lenghts
+    Plot and show a figure of the distribution of episode lenghts in a histogram.
 
     Parameters
     ----------
@@ -301,7 +304,7 @@ def plot_lengths_histogram(data, title, bins=12):
         Second part of the figure title.
     bins : int, optional
         Number of bins in the histogram, by default 12
-    """    
+    """
     plt.figure(figsize=figsize_inch)
     plt.hist(data["WPE"], bins, edgecolor="#EAEAF2", linewidth=1, align="mid")
     plt.title(f"Length of Podcast in Words-Per-Episode - {title}")
@@ -310,42 +313,46 @@ def plot_lengths_histogram(data, title, bins=12):
     plt.tight_layout()
     plt.show()
 
-plot_lengths_histogram(data_full, title="All released episodes (specials included)", bins=20)
+
+plot_lengths_histogram(
+    data_full, title="All released episodes (specials included)", bins=20
+)
 ```
 
-As we can see in @fig-wpe_dist the content is quite varied. Some episodes have almost 16.000 words, while others have only about 2000. But on the whole, most episodes have around 6.000 words. As it turns out, the episodes with the most words are the specials, which are also the longest episodes.
+As we can see in @fig-wpe_dist the content is quite varied. Some episodes have almost 16.000 words, while others have only about 2000. But on the whole, most episodes have around 6.000 words. As it turns out, the episodes with the most words are typically the specials, which is not suprising as these are also the longest episodes.
 
-A histogram of course aggregates our data. Another fun way to visualize the content, is to plot all the individual datapoints over time. Will we be able to spot any trends over time?
+Plotting a histogram of course means that we aggregate our data into bins. This is easy to interpret but also means we are throwing away information. Another fun way to visualize the content, is to plot all the individual datapoints over time. Will we be able to spot any interesting trends?
 
 ```{python}
 #| label: fig-wpe_time
-#| fig-cap: The distribution of Words-per-Episode over time, shown together with the duration of episodes over time. A clear trend is visible where episodes at the start of the podcast lasted more than ~50 minutes, while in the second half of the podcast episode duration dropped to around ~30 minutes. At the same time we can see that the rate at which episodes were released increased rapidly, the density of datapoints increases by a lot! 
+#| fig-cap: The distribution of Words-per-Episode over time, shown together with the duration of episodes over time. A clear trend is visible where episodes at the start of the podcast lasted more than ~50 minutes, while in the second half of the podcast episode duration dropped to around ~30 minutes. At the same time we can see that the rate at which episodes were released increased rapidly, the density of datapoints increases by a lot!
 
 data["duration-s"] = pd.to_timedelta(data["duration"]).dt.total_seconds()
-data["duration-m"] = data["duration-s"]/60.0
+data["duration-m"] = data["duration-s"] / 60.0
+
 
 def plot_wpe_over_time(data):
     """
-    Plot Words per Episode together with duration.
+    Plot and show a figure of the Words per Episode over Time on one axis and the Duration over Time on the other axis.
 
     Parameters
     ----------
     data : pd.DataFrame
         Information about the episodes.
-    """    
-    fig,ax = plt.subplots(figsize=figsize_inch)
+    """
+    fig, ax = plt.subplots(figsize=figsize_inch)
     plt.title("Words-per-Episode and Episode Duration")
     ax.plot(data["date"], data["WPE"], alpha=0.5, label="Words-per-Episode")
     ax.set_xlabel("Date")
     ax.set_ylabel("Words_per_Episode (#)")
     ax.scatter(data["date"], data["WPE"], s=5, label="Individual datapoints")
-    plt.xticks(rotation = 70)
+    plt.xticks(rotation=70)
     ax.xaxis.set_major_locator(mdates.MonthLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%b"))
 
     # second y-axis
-    ax2=ax.twinx()
-    ax2.plot(data["date"], data["duration-m"], c='r', alpha=0.5, label="Duration")
+    ax2 = ax.twinx()
+    ax2.plot(data["date"], data["duration-m"], c="r", alpha=0.5, label="Duration")
     ax2.set_ylabel("Episode Duration (minutes)")
 
     # collect labels for legend
@@ -376,7 +383,7 @@ def plot_lengths_histogram_fit(data, title, bins=12):
 
     Parameters
     ----------
-    data : 
+    data : pd.DataFrame
         Information about the episodes.
     title : str
         Second part of the figure title.
@@ -387,24 +394,38 @@ def plot_lengths_histogram_fit(data, title, bins=12):
     -------
     model_params : list
         List with the fit parameters for the statistical models.
-    """    
+    """
     model_params = []
     plt.figure(figsize=figsize_inch)
     plt.hist(data["WPE"], bins, density=True, edgecolor="#EAEAF2", linewidth=1)
-    
-    #fit the lognormal
+
+    # fit the lognormal
     params = lognorm.fit(data["WPE"], floc=0)
     model_params.append(params)
     x = np.linspace(0, data["WPE"].max(), 100)
     lognormal_fitted = lognorm.pdf(x, *params)
-    plt.plot(x, lognormal_fitted, color="g", label = "Lognormal Distribution:\n"+r"  -$s$="+f"{round(params[0],2)}\n  -loc={round(params[1],2)}\n  -scale={round(params[2],2)}")
-    
-    #fit the gamma
+    plt.plot(
+        x,
+        lognormal_fitted,
+        color="g",
+        label="Lognormal Distribution:\n"
+        + r"  -$s$="
+        + f"{round(params[0],2)}\n  -loc={round(params[1],2)}\n  -scale={round(params[2],2)}",
+    )
+
+    # fit the gamma
     params = gamma.fit(data["WPE"], floc=0)
     model_params.append(params)
     x = np.linspace(0, data["WPE"].max(), 100)
     gamma_fitted = gamma.pdf(x, *params)
-    plt.plot(x, gamma_fitted, color="r", label = "Gamma Distribution:\n"+r"  -$\alpha$="+f"{round(params[0],2)}\n  -loc={round(params[1],2)}\n  -scale={round(params[2],2)}")
+    plt.plot(
+        x,
+        gamma_fitted,
+        color="r",
+        label="Gamma Distribution:\n"
+        + r"  -$\alpha$="
+        + f"{round(params[0],2)}\n  -loc={round(params[1],2)}\n  -scale={round(params[2],2)}",
+    )
 
     plt.title(f"Length of Podcast in Words-Per-Episode  - {title}")
     plt.xlabel("# of Words")
@@ -414,8 +435,11 @@ def plot_lengths_histogram_fit(data, title, bins=12):
     plt.show()
     return model_params
 
+
 data_second_half = data[data["date"] > "2021-08-1"]
-model_params = plot_lengths_histogram_fit(data_second_half, title="Fitted Lognormal and Gamma Distribution", bins=20)
+model_params = plot_lengths_histogram_fit(
+    data_second_half, title="Fitted Lognormal and Gamma Distribution", bins=20
+)
 ```
 
 ::: {.callout-note collapse="true"}
@@ -444,8 +468,8 @@ So perhaps we can add to these lists:
 If we look at the raw data, the mean and the standard deviation are given by:
 
 ```{python}
-print(f"Mean = {round(data_second_half['WPE'].mean(),2)}")
-print(f"Standard deviation = {round(data_second_half['WPE'].std(),2)}")
+print(f"Mean = {round(data_second_half['WPE'].mean(), 2)}")
+print(f"Standard deviation = {round(data_second_half['WPE'].std(), 2)}")
 ```
 
 The best fit on this distribution for the Lognormal distributions gives:
@@ -455,8 +479,8 @@ The best fit on this distribution for the Lognormal distributions gives:
 params = model_params[0]
 mu = np.log(params[2])
 sigma = params[0]
-print(f"Mean = {round(np.exp(mu+sigma**2/2),2)}")
-print(f"Standard deviation = {round(np.sqrt((np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)),2)}")
+print(f"Mean = {round(np.exp(mu+sigma**2/2), 2)}")
+print(f"Standard deviation = {round(np.sqrt((np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)), 2)}")
 ```
 
 The best fit on this distribution for the Gamma distributions gives:
@@ -464,8 +488,8 @@ The best fit on this distribution for the Gamma distributions gives:
 ```{python}
 #| echo: false
 params = model_params[1]
-print(f"Mean = {round(params[0]*params[2],2)}")
-print(f"Standard deviation = {round(np.sqrt(params[0]*params[2]**2),2)}")
+print(f"Mean = {round(params[0]*params[2], 2)}")
+print(f"Standard deviation = {round(np.sqrt(params[0]*params[2]**2), 2)}")
 ```
 :::
 
@@ -477,12 +501,42 @@ In @fig-wpe_time we looked at the content in each unique episode. But it might b
 #| label: fig-content_linear
 #| fig-cap: "There is a clear rising trend in the weekly data, as illustrated by the linear fit. The trend indicates that the amount of weekly content has been increasing with about 144 words per week."
 
-def plot_content(data):
+
+def plot_content_linear_fit(data):
+    """
+    Plot and show a figure of a linear fit to the amount of Content over Time grouped by Week.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Information about the episodes.
+
+    Returns
+    -------
+    rmse_lineair_wpw: float
+        The root mean square error of the linear fit.
+    """
     START = data.iloc[0].date
 
     def weeks_since_start(date):
+        """
+        Calculate the number of weeks since START.
+
+        START is defined outside the functions as the date of the first episode in the dataframe, typically episode 1.
+
+        Parameters
+        ----------
+        date: pandas.timedelta
+            The date for which to calculate the timedifference.
+
+        Returns
+        -------
+        weeks_diff: int
+            The number of weeks from START until date
+
+        """
         time_diff = date - START
-        weeks_diff = int(time_diff / np.timedelta64(1, 'W'))
+        weeks_diff = int(time_diff / np.timedelta64(1, "W"))
         return weeks_diff
 
     # Convert date to weeks since start
@@ -497,11 +551,17 @@ def plot_content(data):
     # Perform linear regression with intercept = 0
     weeks = np.array(weeks)
     a, b, r, p, se = linregress(weeks, WPW)
-    rmse_lineair_wpw = mean_squared_error(WPW, weeks*a + b, squared=False)
+    rmse_lineair_wpw = mean_squared_error(WPW, weeks * a + b, squared=False)
 
     plt.figure(figsize=figsize_inch)
     plt.scatter(weeks, WPW)
-    plt.plot(weeks, weeks*a + b, c='r', label="$y = ax + b$ \n"+f"a = {a:.2f} [words-per-week]\nb = {b:.2f} [words]\nRMSE = {rmse_lineair_wpw:.2f}\n$R^2$  = {r**2:.2f}")
+    plt.plot(
+        weeks,
+        weeks * a + b,
+        c="r",
+        label="$y = ax + b$ \n"
+        + f"a = {a:.2f} [words-per-week]\nb = {b:.2f} [words]\nRMSE = {rmse_lineair_wpw:.2f}\n$R^2$  = {r**2:.2f}",
+    )
     plt.legend(loc="upper left")
     plt.xlabel("Weeks since start of podcast")
     plt.ylabel("Released content per week [words]")
@@ -509,7 +569,8 @@ def plot_content(data):
     plt.title("The amount of content per week is steadily increasing")
     return rmse_lineair_wpw
 
-rmse_lineair_wpw = plot_content(data)
+
+rmse_lineair_wpw = plot_content_linear_fit(data)
 ```
 
 That's great! We are getting more and more content every week. But, I'm not quite content with the linear trend. It is a decent fit, but if we take a closer look at the data, it doesn't actually look like the rising trend is continuing after week 90, and it is not reasonable to expect the trend to keep rising given that the show appears to have settled into the new release schedule. Therefore, a logistic regression might be a better fit for this data:
@@ -518,18 +579,88 @@ That's great! We are getting more and more content every week. But, I'm not quit
 #| label: fig-content_logistic
 #| fig-cap: "A Logistic-function fitted to the Words-per-week data. The lower RMSE and higher $R^2$ indicate that this is a better fit than the linear-regression. It indicates that the initial release rate was around 8500 WPW, and it has increased to almost 22100 WPW."
 
-def plot_content_logistic(data):
+
+def plot_content_logistic_fit(data):
+    """
+    Plot and show a figure of a logistic fit to the amount of Content over Time grouped by Week.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Information about the episodes.
+
+    Returns
+    -------
+    _: float
+        The root mean square error of the logistic fit.
+    """
+    START = data.iloc[0].date
+
     def weeks_since_start(date):
-        time_diff = date - data.iloc[0].date
-        weeks_diff = int(time_diff / np.timedelta64(1, 'W'))
+        """
+        Calculate the number of weeks since START.
+
+        START is defined outside the functions as the date of the first episode in the dataframe, typically episode 1.
+
+        Parameters
+        ----------
+        date: pandas.timedelta
+            The date for which to calculate the timedifference.
+
+        Returns
+        -------
+        weeks_diff: int
+            The number of weeks from START until date
+
+        """
+        time_diff = date - START
+        weeks_diff = int(time_diff / np.timedelta64(1, "W"))
         return weeks_diff
-    
-    def logifunc(x,A,x0,k,off):
-        return A / (1 + np.exp(-k*(x-x0)))+off
+        return weeks_diff
+
+    def logifunc(x, A, x0, k, off):
+        """
+        Returns the Y value of the specified logistic function for the given X.
+
+        Parameters
+        ----------
+        x : np.array
+            The X values for which to compute the logistic function
+
+        A : float
+            The Amplitude of the logistic function
+        x0 : float
+            The x-axis shift of the logistic curve, defines the midpoint of the step in the logistic curve
+        k : float
+            Defines how fast the logistic curve changes
+        off : float
+            The y-axis offset of the logistic curve.
+
+        Returns
+        -------
+        _: float
+            The y value of the logistic curve at x
+        """
+        return A / (1 + np.exp(-k * (x - x0))) + off
 
     def r_squared(y, y_pred):
+        """
+        Calculates R-squared metric for the given input.
+
+        Parameters
+        ----------
+        y : np.array
+            Observed y-values
+        y_pred : np.array
+            Predicted y-values
+
+        Returns
+        -------
+        _: float
+            R-squared metric
+        """
         y, y_pred = np.array(y), np.array(y_pred)
-        return 1 - np.sum((y - y_pred)**2)/np.sum((y - np.mean(y))**2)
+        return 1 - np.sum((y - y_pred) ** 2) / np.sum((y - np.mean(y)) ** 2)
 
     # Convert date to weeks since start
     data_plot = data.copy()
@@ -541,24 +672,31 @@ def plot_content_logistic(data):
     WPW = data_plot.groupby("weeks").WPE.sum()
 
     # Fit logistic
-    popt, pcov = curve_fit(logifunc, weeks, WPW, p0=[25000,60,0.1, 5000])
+    popt, pcov = curve_fit(logifunc, weeks, WPW, p0=[25000, 60, 0.1, 5000])
     rmse_logistic_wpw = mean_squared_error(WPW, logifunc(weeks, *popt), squared=False)
     r_logistic_wpw = r_squared(WPW, logifunc(weeks, *popt))
 
     # Perform linear regression with intercept = 0
     plt.figure(figsize=figsize_inch)
     plt.scatter(weeks, WPW)
-    plt.plot(weeks, logifunc(weeks, *popt), 'r-',label=f'Fitted Parameters {[round(p,1) for p in popt]}\nStarting-level={popt[3]:.1f}\nEnding-level ={popt[3]+popt[0]:.1f} \nRMSE={rmse_logistic_wpw:.2f}\n $R^2$ = {r_logistic_wpw:.2f}')
+    plt.plot(
+        weeks,
+        logifunc(weeks, *popt),
+        "r-",
+        label=f"Fitted Parameters {[round(p,1) for p in popt]}\nStarting-level={popt[3]:.1f}\nEnding-level ={popt[3]+popt[0]:.1f} \nRMSE={rmse_logistic_wpw:.2f}\n $R^2$ = {r_logistic_wpw:.2f}",
+    )
     plt.legend(loc="upper left")
     plt.xlabel("Weeks since start of podcast")
     plt.ylabel("Released content per week [words]")
-    plt.title("The amount of content per week has almost tripled since the start of the podcast!")
+    plt.title(
+        "The amount of content per week has almost tripled since the start of the podcast!"
+    )
     plt.ylim(0, 33000)
     plt.show()
     return mean_squared_error(WPW, logifunc(weeks, *popt), squared=False)
 
 
-rmse_logistic_wpw = plot_content_logistic(data)
+rmse_logistic_wpw = plot_content_logistic_fit(data)
 ```
 
 Yes! This looks more reasonable. The content amount of content we are getting per week from Maarten and Tom has almost tripled since the podcast started. 
@@ -600,7 +738,8 @@ Luckily for us, calculating the average speech rate is rather trivial. We can ju
 #| label: fig-wpm_norm
 #| fig-cap: "The speech rate is nicely approximated by a normal distribution. The average speech rate per episode is 164 Words-per-Minute, just above the 150-160 WPM range recommended for podcasting. 95% of the episodes lie between the range 144-184 WPM."
 
-data["WPM"] = data["WPE"]/data["duration-m"]
+data["WPM"] = data["WPE"] / data["duration-m"]
+
 
 def plot_wpm_histogram(data):
     """
@@ -610,7 +749,12 @@ def plot_wpm_histogram(data):
     ----------
     data : pd.DataFrame
         Information about the episodes.
-    """    
+
+    Returns
+    -------
+    params: list
+        Normal distribution fit parameters.
+    """
     # Fit normal distribution
     params = norm.fit(data["WPM"])
     x = np.linspace(data["WPM"].min() - 10, data["WPM"].max() + 10, 100)
@@ -620,13 +764,21 @@ def plot_wpm_histogram(data):
     fig, ax = plt.subplots(figsize=figsize_inch)
     plt.title("Distribution of Words-per-Minute")
     ax.hist(data["WPM"], bins=15, density=True, edgecolor="#EAEAF2", linewidth=1)
-    ax.plot(x, norm_fitted, label = "Normal Distribution:\n"+r"  - $\mu$ = "+f"{round(params[0],2)}\n  - $\sigma$ = {round(params[1],2)}")
+    ax.plot(
+        x,
+        norm_fitted,
+        label="Normal Distribution:\n"
+        + r"  - $\mu$ = "
+        + f"{round(params[0],2)}\n  - $\sigma$ = {round(params[1],2)}",
+    )
     ax.set_xlabel("Words per minute (words/minute)")
     ax.set_ylabel("Probability Density")
-    plt.xticks(rotation = 70)
+    plt.xticks(rotation=70)
     plt.legend()
     plt.show()
     return params
+
+
 params = plot_wpm_histogram(data)
 ```
 Thats interesting! As shown in @fig-wpm_norm, on average Maarten and Tom talk slightly faster than the talking rate recommended for full listener comprehension.
@@ -645,7 +797,21 @@ By doing this, we can estimate the speech rate distribution per episode, and plo
 #| label: fig-wpm_time_range
 #| fig-cap: "Using the .srt (subtitle) files generated by Whisper, we are able to analyse the spread of the WPM per minute. For symmetric distributions the Highest Probability Density is the same as the mean, but for skewed distributions such as the lognormal, this value tends to be smaller than the mean and is a bit more representative for the most likely value. We can see that the episodes remain between 140-200 WPM for the most part."
 
+
 def parse_srt(row):
+    """
+    Parse an .srt file into a dataframe with timestamps per line.
+
+    Parameters
+    ----------
+    row : pd.Series
+        entrie in data dataframe with episode information
+
+    Returns
+    -------
+    srt: pd.DataFrame
+        DataFrame with parsed .srt data
+    """
     path = row.txt_path.replace("txt", "srt")
     srt = read_txt_file(path).split("\n")
 
@@ -656,35 +822,37 @@ def parse_srt(row):
     # Followed by a blank line
     lines, timestamps, sentences = [], [], []
     i = 0
-    while i < len(srt)-1:
+    while i < len(srt) - 1:
         lines.append(srt[i])
-        timestamps.append(srt[i+1])
-        sentences.append(srt[i+2])
-        i += 4    
-    
+        timestamps.append(srt[i + 1])
+        sentences.append(srt[i + 2])
+        i += 4
+
     # Get length of sentence
-    srt = pd.DataFrame({"lines":lines, "sentences":sentences, "timestamps":timestamps}) 
-    temp = srt["timestamps"].str.split("-->", n = 1, expand = True)
+    srt = pd.DataFrame(
+        {"lines": lines, "sentences": sentences, "timestamps": timestamps}
+    )
+    temp = srt["timestamps"].str.split("-->", n=1, expand=True)
     srt["time_start"] = temp[0]
-    srt["time_start"] = srt["time_start"].str.replace(",",".")
+    srt["time_start"] = srt["time_start"].str.replace(",", ".")
     srt["time_end"] = temp[1]
-    srt["time_end"] = srt["time_end"].str.replace(",",".")
+    srt["time_end"] = srt["time_end"].str.replace(",", ".")
     srt["time_start"] = pd.to_timedelta(srt.time_start)
     srt = srt.drop(columns="timestamps")
     srt["time_end"] = pd.to_timedelta(srt.time_end)
-    srt["duration"] = pd.to_timedelta(srt["time_end"] - srt["time_start"]).dt.total_seconds()
+    srt["duration"] = pd.to_timedelta(
+        srt["time_end"] - srt["time_start"]
+    ).dt.total_seconds()
 
-    # Get cadence of episode 
+    # Get cadence of episode
     srt["length"] = srt["sentences"].transform(lambda text: get_length(text))
-    
+
     # Aggregate per minute
-    srt["minute"] = (srt.time_end.dt.total_seconds()//60).astype("int")
+    srt["minute"] = (srt.time_end.dt.total_seconds() // 60).astype("int")
     srt = srt.groupby("minute").agg(
-        {"sentences":" ".join,
-         "duration":"sum",
-         "length":"sum"}
+        {"sentences": " ".join, "duration": "sum", "length": "sum"}
     )
-    srt["WPM_line"] = srt["length"]/srt["duration"]*60 
+    srt["WPM_line"] = srt["length"] / srt["duration"] * 60
     srt = srt.reset_index()
     srt["episode"] = path
     srt["date"] = row.date
@@ -702,7 +870,23 @@ def parse_srt(row):
     srt = srt[srt.WPM_line >= 100]
     return srt
 
+
 def plot_srts_wpm(srts):
+    """
+    Plot wpm distribution over time, using kernel density estimators.
+
+    Parameters
+    ----------
+    srts : list(pd.DataFrames)
+        A parsed .srt DataFrame per episode
+
+    Returns
+    -------
+    ci_90: np.array
+        90% confidence interval per episode (not HPDI).
+    hpd: np.array
+        WPM with highest probability density per episode.
+    """
     ci_60 = []
     ci_90 = []
     hpd = []
@@ -723,18 +907,35 @@ def plot_srts_wpm(srts):
 
     fig, ax = plt.subplots(figsize=figsize_inch)
     plt.plot(date, hpd, alpha=0.5, color="k", label="Highest Probability Density WPM")
-    plt.fill_between(date, ci_90[:,0], ci_90[:,1], color="#1f77b4", linewidth = 0, alpha=0.3, label=r"90% interval WPM")
-    plt.fill_between(date, ci_60[:,0], ci_60[:,1], color="#1f77b4", linewidth = 0, alpha=0.5, label=r"60% interval WPM")
+    plt.fill_between(
+        date,
+        ci_90[:, 0],
+        ci_90[:, 1],
+        color="#1f77b4",
+        linewidth=0,
+        alpha=0.3,
+        label=r"90% interval WPM",
+    )
+    plt.fill_between(
+        date,
+        ci_60[:, 0],
+        ci_60[:, 1],
+        color="#1f77b4",
+        linewidth=0,
+        alpha=0.5,
+        label=r"60% interval WPM",
+    )
 
     plt.xlabel("Episode #")
     plt.ylabel("Words-per-Minute")
     plt.title("Confidence Interval of WPM_lines")
     plt.legend()
-    plt.xticks(rotation = 70)
+    plt.xticks(rotation=70)
     ax.xaxis.set_major_locator(mdates.MonthLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%b"))
     plt.show()
     return ci_90, hpd
+
 
 srts = []
 for _, row in data.iterrows():
@@ -748,7 +949,24 @@ It is fun to see that @fig-wpe_time and @fig-wpm_time_range show a similair chan
 #| label: fig-wpm_time_range_weekdays
 #|fig-cap: "Grouping these episodes by the respective day of the week, we can see a pattern emerge. Tuesday episodes tend to be the slowest, while Monday and Saturday episodes tend to be the fastest. Wednesday episodes have the smallest spread thus appear to be the most consistent, while also being fairly slow. Thus Tuesday and Wednesday episodes are perhaps the best choice for those trying to sleep."
 
+
 def plot_srts_wpm_weekly(srts):
+    """
+    Plot wpm distribution over per weekday, ing kernel density estimators.
+
+    Parameters
+    ----------
+    srts : list(pd.DataFrames)
+        A parsed .srt DataFrame per episode
+
+    Returns
+    -------
+    ci_90: np.array
+        90% confidence interval per weekday (not HPDI).
+    hpd: np.array
+        WPM with highest probability density per weekday.
+    """
+
     # plot per day of week
     df_weekday = pd.concat(srts)
     df_weekday["weekday"] = df_weekday.date.transform(lambda x: x.weekday())
@@ -757,9 +975,17 @@ def plot_srts_wpm_weekly(srts):
     ci_90 = []
     hpd = []
     weekdays = []
-    number_to_week = {1:"Monday", 2:"Tuesday", 3:"Wednesday", 4:"Thursday", 5:"Friday", 6:"Saturday", 7:"Sunday"}
+    number_to_week = {
+        1: "Monday",
+        2: "Tuesday",
+        3: "Wednesday",
+        4: "Thursday",
+        5: "Friday",
+        6: "Saturday",
+        7: "Sunday",
+    }
     for i in range(7):
-        weekday = number_to_week[i+1]
+        weekday = number_to_week[i + 1]
         df = df_weekday[df_weekday.weekday == i]
         # Calculate the data confidence interval
         kde = KDEUnivariate(df.WPM_line)
@@ -776,13 +1002,35 @@ def plot_srts_wpm_weekly(srts):
     ci_90 = np.array(ci_90)
 
     # Set horizontal labels
-    labels = df_weekday.groupby("weekday").agg({"weekday": lambda x: x.iloc[0], "episode":pd.Series.nunique})
-    labels["label"] = labels.agg(lambda row: f"{number_to_week[row.weekday+1]}\n{row.episode} episodes", axis=1)
+    labels = df_weekday.groupby("weekday").agg(
+        {"weekday": lambda x: x.iloc[0], "episode": pd.Series.nunique}
+    )
+    labels["label"] = labels.agg(
+        lambda row: f"{number_to_week[row.weekday+1]}\n{row.episode} episodes", axis=1
+    )
 
     fig, ax = plt.subplots(figsize=figsize_inch)
-    plt.plot(weekdays, hpd, alpha=0.5, color="k", label="Highest Probability Density WPM")
-    plt.fill_between(weekdays, ci_90[:,0], ci_90[:,1], color="#1f77b4", linewidth = 0, alpha=0.3, label=r"90% interval WPM")
-    plt.fill_between(weekdays, ci_60[:,0], ci_60[:,1], color="#1f77b4", linewidth = 0, alpha=0.5, label=r"60% interval WPM")
+    plt.plot(
+        weekdays, hpd, alpha=0.5, color="k", label="Highest Probability Density WPM"
+    )
+    plt.fill_between(
+        weekdays,
+        ci_90[:, 0],
+        ci_90[:, 1],
+        color="#1f77b4",
+        linewidth=0,
+        alpha=0.3,
+        label=r"90% interval WPM",
+    )
+    plt.fill_between(
+        weekdays,
+        ci_60[:, 0],
+        ci_60[:, 1],
+        color="#1f77b4",
+        linewidth=0,
+        alpha=0.5,
+        label=r"60% interval WPM",
+    )
     plt.xlabel("Weekday")
     plt.ylabel("Words-per-Minute")
     plt.title("Confidence Interval of WPM_lines")
@@ -794,8 +1042,11 @@ def plot_srts_wpm_weekly(srts):
     plt.show()
     return ci_90, hpd
 
+
 # Again, we only select the second half of the show
-srts_second_half = [srt for second, srt in zip((data["date"] > "2021-08-1"), srts) if second]
+srts_second_half = [
+    srt for second, srt in zip((data["date"] > "2021-08-1"), srts) if second
+]
 ci_90, hpd = plot_srts_wpm_weekly(srts_second_half)
 ```
 
@@ -825,7 +1076,15 @@ path_wordcloud_full = "./cache/wordcloud_full.pickle"
 
 if not os.path.exists(path_wordcloud_full):
     # Generate a word cloud image
-    wordcloud_full = WordCloud(width=figsize[0], height=figsize[1], include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=300).generate(full_text)
+    wordcloud_full = WordCloud(
+        width=figsize[0],
+        height=figsize[1],
+        include_numbers=True,
+        random_state=random_seed,
+        background_color="white",
+        relative_scaling=1,
+        max_words=300,
+    ).generate(full_text)
     write_pickle(path_wordcloud_full, wordcloud_full)
 else:
     wordcloud_full = read_pickle(path_wordcloud_full)
@@ -833,7 +1092,7 @@ else:
 # Display the generated image:
 # the matplotlib way:
 plt.figure(figsize=figsize_inch)
-plt.imshow(wordcloud_full, interpolation='bilinear')
+plt.imshow(wordcloud_full, interpolation="bilinear")
 plt.axis("off")
 plt.tight_layout()
 plt.show()
@@ -853,14 +1112,23 @@ dutch_stopwords = set(dutch_stopwords)
 # Create improved wordcloud
 path_wordcloud_stopwords = "./cache/wordcloud_stopwords.pickle"
 if not os.path.exists(path_wordcloud_stopwords):
-    wordcloud_stopwords = WordCloud(stopwords=dutch_stopwords, width=figsize[0], height=figsize[1], include_numbers=True, random_state=2112, background_color="white", relative_scaling=1, max_words=300).generate(full_text)
+    wordcloud_stopwords = WordCloud(
+        stopwords=dutch_stopwords,
+        width=figsize[0],
+        height=figsize[1],
+        include_numbers=True,
+        random_state=random_seed,
+        background_color="white",
+        relative_scaling=1,
+        max_words=300,
+    ).generate(full_text)
     write_pickle(path_wordcloud_stopwords, wordcloud_stopwords)
 else:
     wordcloud_stopwords = read_pickle(path_wordcloud_stopwords)
 # Display the generated image:
 # the matplotlib way:
 plt.figure(figsize=figsize_inch)
-plt.imshow(wordcloud_stopwords, interpolation='bilinear')
+plt.imshow(wordcloud_stopwords, interpolation="bilinear")
 plt.axis("off")
 plt.tight_layout()
 plt.show()
@@ -887,17 +1155,20 @@ def get_top_n_words(data):
     bag_of_words : pd.DataFrame
         Table containing the word frequencies per episode.
     vec : sklearn.CountVectorizer
-        CountVectorizer fitted to the corpus
+        CountVectorizer fitted to the corpus.
     """
-    vec = CountVectorizer(ngram_range=(1,5), stop_words=dutch_stopwords).fit(data["text"])
+    vec = CountVectorizer(ngram_range=(1, 5), stop_words=dutch_stopwords).fit(
+        data["text"]
+    )
     bag_of_words = vec.transform(data["text"])
-    sum_words = bag_of_words.sum(axis=0) 
+    sum_words = bag_of_words.sum(axis=0)
     word_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
-    word_freq = sorted(word_freq, key = lambda x: x[1], reverse=True)
+    word_freq = sorted(word_freq, key=lambda x: x[1], reverse=True)
     word_freq = pd.DataFrame(word_freq, columns=("Token", "Count"))
-    word_freq["Rate_per_Episode"] = round(word_freq["Count"]/data.shape[0],2)
-    word_freq = word_freq[word_freq["Rate_per_Episode"]>=1]
+    word_freq["Rate_per_Episode"] = round(word_freq["Count"] / data.shape[0], 2)
+    word_freq = word_freq[word_freq["Rate_per_Episode"] >= 1]
     return word_freq, bag_of_words, vec
+
 
 path_top_n_words = "./cache/top_n_words.pickle"
 if not os.path.exists(path_top_n_words):
@@ -907,7 +1178,7 @@ if not os.path.exists(path_top_n_words):
 else:
     package = read_pickle(path_top_n_words)
     word_freq, bag_of_words, vectorizer = package
-pd.set_option('display.max_rows', word_freq.shape[0]+1)
+pd.set_option("display.max_rows", word_freq.shape[0] + 1)
 word_freq.iloc[:21].to_html(index=False)
 ```
 
@@ -936,11 +1207,11 @@ def plot_word_over_time(target_word):
     ----------
     target_word : str
         Word of interest.
-    """    
+    """
     id = [idx for word, idx in vectorizer.vocabulary_.items() if word == target_word][0]
-    dist = bag_of_words[:,id].toarray().T[0]
+    dist = bag_of_words[:, id].toarray().T[0]
 
-    fig,ax = plt.subplots(figsize=figsize_inch)
+    fig, ax = plt.subplots(figsize=figsize_inch)
     plt.plot(data["date"], dist)
     plt.title(f"Mentions of the word: {target_word}")
     plt.ylabel("Counts")
@@ -948,9 +1219,10 @@ def plot_word_over_time(target_word):
 
     # set x-axis
     ax.xaxis.set_major_locator(mdates.MonthLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
-    plt.xticks(rotation = 70)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%b"))
+    plt.xticks(rotation=70)
     plt.show()
+
 
 target_word = "oekraïne"
 plot_word_over_time(target_word)
@@ -995,28 +1267,34 @@ if not os.path.exists(embeddings_path):
 else:
     embeddings = np.load(embeddings_path)
 
-# Train and save our BERTopic model
+# Train and save our BERTopic model, load from cache if save file is found
 model_path = "./cache/BERTopic_topic_model.pickle"
 if not os.path.exists(model_path):
+    # Reset random seeds
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+
     # Define sub-models
     sentence_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
     vectorizer = CountVectorizer(stop_words=dutch_stopwords)
     umap_model = UMAP(
-        n_neighbors=20, #Higher -> More global structure, less local
-        n_components=7, #Effects clustering mostly, advice is to leave around ~5
+        n_neighbors=15,  # Higher -> More global structure, less local
+        n_components=7,  # Effects clustering mostly, advice is to leave around ~5
         min_dist=0.0,
-        metric='cosine',
-        random_state=2112)
+        metric="cosine",
+        random_state=random_seed + 1,
+    )
 
     hdbscan_model = HDBSCAN(
-        min_cluster_size=15, #Higher -> less clusters, bigger size
-        min_samples=7, #Lower -> less outlier classifications, may be detrimental to quality topics.
-        metric='euclidean', cluster_selection_method='eom')
+        min_cluster_size=15,  # Higher -> less clusters, bigger size
+        min_samples=4,  # Lower -> less outlier classifications, may be detrimental to quality topics.
+        metric="euclidean",
+        cluster_selection_method="eom",
+    )
 
     # Train our topic model
     topic_model = BERTopic(
         n_gram_range=(1),
-        min_topic_size=10,
         embedding_model=sentence_model,
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
@@ -1036,7 +1314,9 @@ Our model has tried to assigned each minute of the podcast, to a topic, excludin
 
 ```{python}
 topics = topic_model.get_topic_info()
-topics[1:10].to_html(index=False)
+print(len(topics))
+topics[:16]
+# topics[1:11].to_html(index=False)
 ```
 Amazing! We can see that the model was able to find clearly interpretable topics, and they make a lot of sense. Maarten and Tom have talked a lot about the Ukraine and Russia, as well as Dutch politics, the polics of the USA, Covid-19, the Netherlands. I'm realy impressed with how well this works.
 
@@ -1085,38 +1365,42 @@ The following figure is really cool! Our model has assigned topics to our docume
 #| fig-cap: "Explore the latent embedding and clustering of documents yourself in this interactive figure!"
 # Generate nicer looking labels and set them in our model
 topic_labels = topic_model.generate_topic_labels(
-    nr_words=3,
-    topic_prefix=False,
-    word_length=25,
-    separator=","
+    nr_words=3, topic_prefix=False, word_length=25, separator=","
 )
 topic_model.set_topic_labels(topic_labels)
 
 # Create reduced embeddings we can reuse for consistency
 reduced_embeddings_path = "./cache/reduced_embeddings.npy"
 if not os.path.exists(reduced_embeddings_path) or 1:
-    umap_model_2d = UMAP(n_neighbors=10, n_components=2, min_dist=0.0, metric='cosine', random_state=2112).fit(embeddings)
+    umap_model_2d = UMAP(
+        n_neighbors=10,
+        n_components=2,
+        min_dist=0.0,
+        metric="cosine",
+        random_state=random_seed,
+    ).fit(embeddings)
     reduced_embeddings = umap_model_2d.embedding_
     np.save(reduced_embeddings_path, reduced_embeddings)
 else:
     reduced_embeddings = np.load(reduced_embeddings_path)
 
 # Manually selected some interesting topics to prevent information overload
-topics_of_interest = list(range(0,100))
+topics_of_interest = list(range(0, 100))
 
 # I added the title to the documents themselves for easier interactivity
-adjusted_docs = ["<b>" + title + "</b><br>" + doc[:100] + "..." 
-                 for doc, title in zip(docs, titles)]
+adjusted_docs = [
+    "<b>" + title + "</b><br>" + doc[:100] + "..." for doc, title in zip(docs, titles)
+]
 
 # Visualize documents
 topic_model.visualize_documents(
-    adjusted_docs, 
-    reduced_embeddings=reduced_embeddings, 
-    hide_annotations=False, 
+    adjusted_docs,
+    reduced_embeddings=reduced_embeddings,
+    hide_annotations=False,
     topics=topics_of_interest,
     custom_labels=True,
-    width = figsize[0],
-    height = figsize[1]
+    width=figsize[0],
+    height=figsize[1],
 )
 ```
 
@@ -1179,163 +1463,201 @@ topic_model.visualize_hierarchical_documents(
 #| label: fig-topic_per_week_over_time
 #| fig-cap: "The top 12 most occuring topics of the podcast as visualized over time. We can see several big events in the data, such as the presidential elections in the USA in 2020, the invasion of Ukraine in 2022, and the farmers protests in the summer of 2022."
 
-def topics_over_time_weeks(topic_model,
-                         docs: List[str],
-                         timestamps: Union[List[str],
-                                           List[int]],
-                         binsize: int = None,
-                         datetime_format: str = None,
-                         evolution_tuning: bool = True,
-                         global_tuning: bool = True):
-        """ Create topics over time
-        To create the topics over time, BERTopic needs to be already fitted once.
-        From the fitted models, the c-TF-IDF representations are calculate at
-        each timestamp t. Then, the c-TF-IDF representations at timestamp t are
-        averaged with the global c-TF-IDF representations in order to fine-tune the
-        local representations.
-        NOTE:
-            Make sure to use a limited number of unique timestamps (<100) as the
-            c-TF-IDF representation will be calculated at each single unique timestamp.
-            Having a large number of unique timestamps can take some time to be calculated.
-            Moreover, there aren't many use-cased where you would like to see the difference
-            in topic representations over more than 100 different timestamps.
-        Arguments:
-            docs: The documents you used when calling either `fit` or `fit_transform`
-            timestamps: The timestamp of each document. This can be either a list of strings or ints.
-                        If it is a list of strings, then the datetime format will be automatically
-                        inferred. If it is a list of ints, then the documents will be ordered by
-                        ascending order.
-            binsize:    The binsize you want to create for the timestamps. 
-                        The binsize is given in number of weeks, the default is 2.
-            datetime_format: The datetime format of the timestamps if they are strings, eg “%d/%m/%Y”.
-                             Set this to None if you want to have it automatically detect the format.
-                             See strftime documentation for more information on choices:
-                             https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior.
-            evolution_tuning: Fine-tune each topic representation at timestamp *t* by averaging its
-                              c-TF-IDF matrix with the c-TF-IDF matrix at timestamp *t-1*. This creates
-                              evolutionary topic representations.
-            global_tuning: Fine-tune each topic representation at timestamp *t* by averaging its c-TF-IDF matrix
-                       with the global c-TF-IDF matrix. Turn this off if you want to prevent words in
-                       topic representations that could not be found in the documents at timestamp *t*.
-        Returns:
-            topics_over_time: A dataframe that contains the topic, words, and frequency of topic
-                              at timestamp *t*.
-        """
-        documents = pd.DataFrame({"Document": docs, "Topic": topic_model.topics_, "Timestamps": timestamps})
-        global_c_tf_idf = normalize(topic_model.c_tf_idf_, axis=1, norm='l1', copy=False)
+def topics_over_time_weeks(
+    topic_model,
+    docs: List[str],
+    timestamps: Union[List[str], List[int]],
+    binsize: int = None,
+    datetime_format: str = None,
+    evolution_tuning: bool = True,
+    global_tuning: bool = True,
+):
+    """
+    Create topics over time, aggregated to the bi-weekly level.
 
-        all_topics = sorted(list(documents.Topic.unique()))
-        all_topics_indices = {topic: index for index, topic in enumerate(all_topics)}
+    (Please note, this function is a direct addaptation of the sourcecode of BERTopic)
+    To create the topics over time, BERTopic needs to be already fitted once.
+    From the fitted models, the c-TF-IDF representations are calculate at
+    each timestamp t. Then, the c-TF-IDF representations at timestamp t are
+    averaged with the global c-TF-IDF representations in order to fine-tune the
+    local representations.
+    NOTE:
+        Make sure to use a limited number of unique timestamps (<100) as the
+        c-TF-IDF representation will be calculated at each single unique timestamp.
+        Having a large number of unique timestamps can take some time to be calculated.
+        Moreover, there aren't many use-cased where you would like to see the difference
+        in topic representations over more than 100 different timestamps.
+    Arguments:
+        docs: The documents you used when calling either `fit` or `fit_transform`
+        timestamps: The timestamp of each document. This can be either a list of strings or ints.
+                    If it is a list of strings, then the datetime format will be automatically
+                    inferred. If it is a list of ints, then the documents will be ordered by
+                    ascending order.
+        binsize:    The binsize you want to create for the timestamps.
+                    The binsize is given in number of weeks, the default is 2.
+        datetime_format: The datetime format of the timestamps if they are strings, eg “%d/%m/%Y”.
+                         Set this to None if you want to have it automatically detect the format.
+                         See strftime documentation for more information on choices:
+                         https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior.
+        evolution_tuning: Fine-tune each topic representation at timestamp *t* by averaging its
+                          c-TF-IDF matrix with the c-TF-IDF matrix at timestamp *t-1*. This creates
+                          evolutionary topic representations.
+        global_tuning: Fine-tune each topic representation at timestamp *t* by averaging its c-TF-IDF matrix
+                   with the global c-TF-IDF matrix. Turn this off if you want to prevent words in
+                   topic representations that could not be found in the documents at timestamp *t*.
+    Returns:
+        topics_over_time: A dataframe that contains the topic, words, and frequency of topic
+                          at timestamp *t*.
+    """
+    documents = pd.DataFrame(
+        {"Document": docs, "Topic": topic_model.topics_, "Timestamps": timestamps}
+    )
+    global_c_tf_idf = normalize(topic_model.c_tf_idf_, axis=1, norm="l1", copy=False)
 
-        if isinstance(timestamps[0], str):
-            infer_datetime_format = True if not datetime_format else False
-            documents["Timestamps"] = pd.to_datetime(documents["Timestamps"],
-                                                     infer_datetime_format=infer_datetime_format,
-                                                     format=datetime_format)
+    all_topics = sorted(list(documents.Topic.unique()))
+    all_topics_indices = {topic: index for index, topic in enumerate(all_topics)}
 
-        # extract years from timestamps
-        years = np.unique(data.date.dt.strftime('%Y').astype(int))
-        end_year = pd.to_datetime(f"{years[-1]+1}-01-01")
-        # Get timestamps for every week of the year
-        bin_edges = []
-        for year in years:
-            for week in range(1,54,binsize):
-                date = f"{year}-{week}-1"
-                date = pd.to_datetime(date, format='%Y-%W-%w')
-                bin_edges.append(date)
-        bin_edges = pd.DataFrame(bin_edges, columns=["bin_edges"])
-        #remove year overflow at the end
-        bin_edges = bin_edges[bin_edges.bin_edges < end_year]
-        #remove year overflow inbetween
-        bin_edges = bin_edges.drop_duplicates()
+    if isinstance(timestamps[0], str):
+        infer_datetime_format = True if not datetime_format else False
+        documents["Timestamps"] = pd.to_datetime(
+            documents["Timestamps"],
+            infer_datetime_format=infer_datetime_format,
+            format=datetime_format,
+        )
 
-        # bin the timestamps
-        documents["Bins"] = pd.cut(documents.Timestamps, bins=bin_edges.bin_edges.values)
-        documents["Timestamps"] = documents.apply(lambda row: row.Bins.left, 1)
+    # extract years from timestamps
+    years = np.unique(data.date.dt.strftime("%Y").astype(int))
+    end_year = pd.to_datetime(f"{years[-1]+1}-01-01")
+    # Get timestamps for every week of the year
+    bin_edges = []
+    for year in years:
+        for week in range(1, 54, binsize):
+            date = f"{year}-{week}-1"
+            date = pd.to_datetime(date, format="%Y-%W-%w")
+            bin_edges.append(date)
+    bin_edges = pd.DataFrame(bin_edges, columns=["bin_edges"])
+    # remove year overflow at the end
+    bin_edges = bin_edges[bin_edges.bin_edges < end_year]
+    # remove year overflow inbetween
+    bin_edges = bin_edges.drop_duplicates()
 
-        # Sort documents in chronological order
-        documents = documents.sort_values("Timestamps")
-        timestamps = documents.Timestamps.unique()
-        if len(timestamps) > 200:
-            warnings.warn(f"There are more than 200 unique timestamps (i.e., {len(timestamps)}) "
-                          "which significantly slows down the application. Consider setting `nr_bins` "
-                          "to a value lower than 100 to speed up calculation. ")
+    # bin the timestamps
+    documents["Bins"] = pd.cut(documents.Timestamps, bins=bin_edges.bin_edges.values)
+    documents["Timestamps"] = documents.apply(lambda row: row.Bins.left, 1)
 
-        # For each unique timestamp, create topic representations
-        topics_over_time = []
-        for index, timestamp in tqdm(enumerate(timestamps), disable=not topic_model.verbose):
+    # Sort documents in chronological order
+    documents = documents.sort_values("Timestamps")
+    timestamps = documents.Timestamps.unique()
+    if len(timestamps) > 200:
+        warnings.warn(
+            f"There are more than 200 unique timestamps (i.e., {len(timestamps)}) "
+            "which significantly slows down the application. Consider setting `nr_bins` "
+            "to a value lower than 100 to speed up calculation. "
+        )
 
-            # Calculate c-TF-IDF representation for a specific timestamp
-            selection = documents.loc[documents.Timestamps == timestamp, :]
-            documents_per_topic = selection.groupby(['Topic'], as_index=False).agg(
-                {"Document": " ".join,
-                 "Timestamps": "count"}
-                 )
-            c_tf_idf, words = topic_model._c_tf_idf(documents_per_topic, fit=False)
+    # For each unique timestamp, create topic representations
+    topics_over_time = []
+    for index, timestamp in tqdm(
+        enumerate(timestamps), disable=not topic_model.verbose
+    ):
 
-            if global_tuning or evolution_tuning:
-                c_tf_idf = normalize(c_tf_idf, axis=1, norm='l1', copy=False)
+        # Calculate c-TF-IDF representation for a specific timestamp
+        selection = documents.loc[documents.Timestamps == timestamp, :]
+        documents_per_topic = selection.groupby(["Topic"], as_index=False).agg(
+            {"Document": " ".join, "Timestamps": "count"}
+        )
+        c_tf_idf, words = topic_model._c_tf_idf(documents_per_topic, fit=False)
 
-            # Fine-tune the c-TF-IDF matrix at timestamp t by averaging it with the c-TF-IDF
-            # matrix at timestamp t-1
-            if evolution_tuning and index != 0:
-                current_topics = sorted(list(documents_per_topic.Topic.values))
-                overlapping_topics = sorted(list(set(previous_topics).intersection(set(current_topics))))
+        if global_tuning or evolution_tuning:
+            c_tf_idf = normalize(c_tf_idf, axis=1, norm="l1", copy=False)
 
-                current_overlap_idx = [current_topics.index(topic) for topic in overlapping_topics]
-                previous_overlap_idx = [previous_topics.index(topic) for topic in overlapping_topics]
+        # Fine-tune the c-TF-IDF matrix at timestamp t by averaging it with the c-TF-IDF
+        # matrix at timestamp t-1
+        if evolution_tuning and index != 0:
+            current_topics = sorted(list(documents_per_topic.Topic.values))
+            overlapping_topics = sorted(
+                list(set(previous_topics).intersection(set(current_topics)))
+            )
 
-                c_tf_idf.tolil()[current_overlap_idx] = ((c_tf_idf[current_overlap_idx] +
-                                                          previous_c_tf_idf[previous_overlap_idx]) / 2.0).tolil()
+            current_overlap_idx = [
+                current_topics.index(topic) for topic in overlapping_topics
+            ]
+            previous_overlap_idx = [
+                previous_topics.index(topic) for topic in overlapping_topics
+            ]
 
-            # Fine-tune the timestamp c-TF-IDF representation based on the global c-TF-IDF representation
-            # by simply taking the average of the two
-            if global_tuning:
-                selected_topics = [all_topics_indices[topic] for topic in documents_per_topic.Topic.values]
-                c_tf_idf = (global_c_tf_idf[selected_topics] + c_tf_idf) / 2.0
+            c_tf_idf.tolil()[current_overlap_idx] = (
+                (
+                    c_tf_idf[current_overlap_idx]
+                    + previous_c_tf_idf[previous_overlap_idx]
+                )
+                / 2.0
+            ).tolil()
 
-            # Extract the words per topic
-            labels = sorted(list(documents_per_topic.Topic.unique()))
-            words_per_topic = topic_model._extract_words_per_topic(words, c_tf_idf, labels)
-            topic_frequency = pd.Series(documents_per_topic.Timestamps.values,
-                                        index=documents_per_topic.Topic).to_dict()
+        # Fine-tune the timestamp c-TF-IDF representation based on the global c-TF-IDF representation
+        # by simply taking the average of the two
+        if global_tuning:
+            selected_topics = [
+                all_topics_indices[topic] for topic in documents_per_topic.Topic.values
+            ]
+            c_tf_idf = (global_c_tf_idf[selected_topics] + c_tf_idf) / 2.0
 
-            # Fill dataframe with results
-            topics_at_timestamp = [(topic,
-                                    ", ".join([words[0] for words in values][:5]),
-                                    topic_frequency[topic],
-                                    timestamp) for topic, values in words_per_topic.items()]
-            topics_over_time.extend(topics_at_timestamp)
+        # Extract the words per topic
+        labels = sorted(list(documents_per_topic.Topic.unique()))
+        words_per_topic = topic_model._extract_words_per_topic(words, c_tf_idf, labels)
+        topic_frequency = pd.Series(
+            documents_per_topic.Timestamps.values, index=documents_per_topic.Topic
+        ).to_dict()
 
-            if evolution_tuning:
-                previous_topics = sorted(list(documents_per_topic.Topic.values))
-                previous_c_tf_idf = c_tf_idf.copy()
+        # Fill dataframe with results
+        topics_at_timestamp = [
+            (
+                topic,
+                ", ".join([words[0] for words in values][:5]),
+                topic_frequency[topic],
+                timestamp,
+            )
+            for topic, values in words_per_topic.items()
+        ]
+        topics_over_time.extend(topics_at_timestamp)
 
-        return pd.DataFrame(topics_over_time, columns=["Topic", "Words", "Frequency", "Timestamp"])
+        if evolution_tuning:
+            previous_topics = sorted(list(documents_per_topic.Topic.values))
+            previous_c_tf_idf = c_tf_idf.copy()
 
-def stacked_area_chart_topics(topic_model,
-                               topics_over_time: pd.DataFrame,
-                               top_n_topics: int = 10,
-                               topics: List[int] = None,
-                               normalize_frequency: bool = False,
-                               custom_labels: bool = False,
-                               width: int = figsize[0],
-                               height: int = figsize[1]):
-    """ Visualize topics over time
+    return pd.DataFrame(
+        topics_over_time, columns=["Topic", "Words", "Frequency", "Timestamp"]
+    )
+
+
+def stacked_area_chart_topics(
+    topic_model,
+    topics_over_time: pd.DataFrame,
+    top_n_topics: int = 10,
+    topics: List[int] = None,
+    normalize_frequency: bool = False,
+    custom_labels: bool = False,
+    width: int = figsize[0],
+    height: int = figsize[1],
+):
+    """
+    Visualize topics over time, normalized per timestep
+
+    (Please note, this function is a direct addaptation of the sourcecode of BERTopic)
     Arguments:
         topic_model: A fitted BERTopic instance.
         topics_over_time: The topics you would like to be visualized with the
                           corresponding topic representation
         top_n_topics: To visualize the most frequent topics instead of all
         topics: Select which topics you would like to be visualized
-        custom_labels: Whether to use custom topic labels that were defined using 
+        custom_labels: Whether to use custom topic labels that were defined using
                        `topic_model.set_topic_labels`.
         width: The width of the figure.
         height: The height of the figure.
     Returns:
         A plotly.graph_objects.Figure including all traces
     """
-    colors = (plt.cm.tab20(np.linspace(0, 1, 20)))
+    colors = plt.cm.tab20(np.linspace(0, 1, 20))
     colors = [rgb2hex(color) for color in colors]
     # Select topics based on top_n and topics args
     freq_df = topic_model.get_topic_freq()
@@ -1349,12 +1671,19 @@ def stacked_area_chart_topics(topic_model,
 
     # Prepare data
     if topic_model.custom_labels_ is not None and custom_labels:
-        topic_names = {key: topic_model.custom_labels_[key + topic_model._outliers] for key, _ in topic_model.topic_labels_.items()}
+        topic_names = {
+            key: topic_model.custom_labels_[key + topic_model._outliers]
+            for key, _ in topic_model.topic_labels_.items()
+        }
     else:
-        topic_names = {key: value[:40] + "..." if len(value) > 40 else value
-                       for key, value in topic_model.topic_labels_.items()}
+        topic_names = {
+            key: value[:40] + "..." if len(value) > 40 else value
+            for key, value in topic_model.topic_labels_.items()
+        }
     topics_over_time["Name"] = topics_over_time.Topic.map(topic_names)
-    data = topics_over_time.loc[topics_over_time.Topic.isin(selected_topics), :].sort_values(["Topic", "Timestamp"], ascending=False)
+    data = topics_over_time.loc[
+        topics_over_time.Topic.isin(selected_topics), :
+    ].sort_values(["Topic", "Timestamp"], ascending=False)
 
     # Add traces
     fig = go.Figure()
@@ -1364,62 +1693,66 @@ def stacked_area_chart_topics(topic_model,
         words = trace_data.Words.values
         y = trace_data.Frequency
         if index == 0:
-            fig.add_trace(go.Scatter(x=trace_data.Timestamp, y=y,
-                                    mode='lines',
-                                    line={"color":colors[index]},
-                                    hoverinfo="text",
-                                    name=topic_name,
-                                    stackgroup="one",
-                                    groupnorm="percent",
-                                    hovertext=[f'<b>Topic {topic}</b><br>Words: {word}' for word in words]))
+            fig.add_trace(
+                go.Scatter(
+                    x=trace_data.Timestamp,
+                    y=y,
+                    mode="lines",
+                    line={"color": colors[index]},
+                    hoverinfo="text",
+                    name=topic_name,
+                    stackgroup="one",
+                    groupnorm="percent",
+                    hovertext=[
+                        f"<b>Topic {topic}</b><br>Words: {word}" for word in words
+                    ],
+                )
+            )
         else:
-            fig.add_trace(go.Scatter(x=trace_data.Timestamp, y=y,
-                            mode='lines',
-                            line={"color":colors[index]},
-                            hoverinfo="text",
-                            name=topic_name,
-                            stackgroup='one',
-                            hovertext=[f'<b>Topic {topic}</b><br>Words: {word}' for word in words]))
+            fig.add_trace(
+                go.Scatter(
+                    x=trace_data.Timestamp,
+                    y=y,
+                    mode="lines",
+                    line={"color": colors[index]},
+                    hoverinfo="text",
+                    name=topic_name,
+                    stackgroup="one",
+                    hovertext=[
+                        f"<b>Topic {topic}</b><br>Words: {word}" for word in words
+                    ],
+                )
+            )
     # Styling of the visualization
-    fig.update_xaxes(
-        showgrid=True,
-        dtick="M1",
-        tickformat="%Y-%b"
-        )
-    fig.update_yaxes(
-        showgrid=True,
-        ticksuffix="%"
-        )
+    fig.update_xaxes(showgrid=True, dtick="M1", tickformat="%Y-%b")
+    fig.update_yaxes(showgrid=True, ticksuffix="%")
     fig.update_layout(
         yaxis_title="Normalized Frequency",
         yaxis_range=(0, 100),
         title={
-            'text': f"<b>Topics over Time - Interval size of {binsize} weeks",
-            'y': .93,
-            'x': 0.40,
-            'xanchor': 'center',
-            'yanchor': 'top',
-            'font': dict(
-                size=25,
-                color="Black")
+            "text": f"<b>Topics over Time - Interval size of {binsize} weeks",
+            "y": 0.93,
+            "x": 0.40,
+            "xanchor": "center",
+            "yanchor": "top",
+            "font": dict(size=25, color="Black"),
         },
         template="simple_white",
         width=width,
         height=height,
-        hoverlabel=dict(
-            bgcolor="white",
-            font_size=16,
-            font_family="Rockwell"
-        ),
+        hoverlabel=dict(bgcolor="white", font_size=16, font_family="Rockwell"),
         legend=dict(
             title="<b>Global Topic Representation",
-        )
+        ),
     )
     return fig
 
+
 binsize = 2
-topics_over_time = topics_over_time_weeks(topic_model, docs, timestamps, binsize=binsize)
+topics_over_time = topics_over_time_weeks(
+    topic_model, docs, timestamps, binsize=binsize
+)
 stacked_area_chart_topics(topic_model, topics_over_time, top_n_topics=12)
 ```
 
-We end it here with @fig-topic_per_week_over_time
+We end it here with @fig-topic_per_week_over_time #Todo finish
