@@ -2,9 +2,8 @@
 title: "'Maarten van Rossem - De Podcast' - #330 Textanalysis of the podcast"
 author: "Alex van Vorstenbosch"
 date: today
-abstract: "De 'Maarten van Rossem'-podcast is one of the most popular podcasts in The Netherlands, which has produced more than 300 episodes in the past 2 years. In this article, we produce some fun, and hopefully interesting, statistics about the podcast. This is done by collecting all the currently available podcasts from the web, and transcribing them using the newly available `Whisper` automated speech recognition model by [OpenAI](https://github.com/openai/whisper). After some initial statistical analysis of the podcast, finish our analysis by extracting topics from podcast using `BERTopic`, a Topic Modeling pipeline by [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic). The goal of this project is first of all to have fun analysing the words of Maarten and Tom. I hope you'll learn something interesting from all this, and that you have fun along the way. (And I hope that Maarten and Tom would mention this project in the podcast!)"
+abstract: "De 'Maarten van Rossem'-podcast is one of the most popular podcasts in The Netherlands, which has produced more than 300 episodes in the past 2 years. In this article, we produce some fun, and hopefully interesting, statistics about the podcast. This is done by collecting all the currently available podcasts from the web, and transcribing them using the newly available `Whisper` automated speech recognition model by [OpenAI](https://github.com/openai/whisper). After some initial statistical analysis of the podcast, finish our analysis by extracting topics from podcast using `BERTopic`, a Topic Modeling pipeline by [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic). The goal of this project is first of all to have fun analysing the words of Maarten and Tom. I hope you'll learn something interesting from all this, enjoy!"
 abstract-title: "Analysing the Podcast"
-number-sections: true
 highlight-style: arrow
 format:
   html:
@@ -31,9 +30,9 @@ jupyter: maarten
 
 # Introduction and Code Setup {#sec-setup}
 Hi! Welcome at the start of our journey through the data of the 'Maarten van Rossem' podcast.
-As you will notice below, I've included all the code for this analysis in this document, so you can see exactly how the analysis was performed. Some may find this wonderful, while some may find this more annoying than anything else. To be fair, it does hinder the readability of the article a little. That is why the default setting is to hide the code. However, if you'd like to see all the code, you can click the `</> Code` tab to the right of the Title, and click `Show all code` to set all code chunks to be unfolded and visible.
+As you will notice below, I've included all the code for this analysis in this document, so you can see exactly how the analysis was performed. Some may find this wonderful, while some may find this more annoying than anything else. To be fair, it does hinder the readability of the article a little. That is why the default setting is to hide the code. However, if you'd like to see all the code, you can click the `</> Code` tab to the right of the Title, and click `Show All Code` to set all code chunks to be unfolded and visible.
 
-It's also good to note, that if you are interested in the source-code of other elements of this project such as the webscraper, please click `View Source` in the same tab to visit my github profile. 
+It's also good to note, that if you are interested in the source-code of other elements of this project such as the webscraper, you can click `View Source` in the same tab to visit this project on github. 
 
 A final note is that at the top right of the page you will find a small button which you can use to toggle `dark-mode` for this article.
 
@@ -53,6 +52,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.colors import rgb2hex
 import plotly.graph_objects as go
+import plotly.io as pio
+pio.renderers.default='plotly_mimetype+notebook_connected'
 
 # Set the random seed for reproducability
 import random
@@ -196,7 +197,7 @@ is_ep = (data.is_episode==True)
 data[~is_ep][print_cols].to_html(index=False)
 ```
 
-For our analysis, it is better to ignore these specials, as they are not representative for typical podcast episodes. When we remove these episodes we're left with:
+For our analysis, it is better to ignore these specials, as they are not representative for typical podcast episodes. 
 
 ```{python}
 #| output: asis
@@ -205,7 +206,7 @@ For our analysis, it is better to ignore these specials, as they are not represe
 # The standard dataframe will only contain the numbered episodes from now on
 data = data_full[is_ep].reset_index(drop=True)
 num_episodes = data.shape[0]
-print(f"We have {num_episodes} episodes.")
+print(f"When we remove these episodes we have {num_episodes} episodes.")
 print(f"However, the latest episode is {data.episode.max()}")
 ```
 We are missing 1 episode, episode _'#116 - Joe Biden: 1 jaar'_ as this is the only episode that was released exclusively for paid subscribers to the podcast.
@@ -240,7 +241,7 @@ print(f"{days_running} days.")
 #| output: asis
 #| echo: false
 mean_time_between_episodes = days_running/num_episodes
-print(f"For the loyal listeners, that's good new! As we have {data.episode.max()} episodes at the time of writing. It means that the average waiting time for a new episode is only {mean_time_between_episodes:.2f} days! That is more than {7/mean_time_between_episodes:.0f} episodes per week over the span of 2 years, wow!")
+print(f"For the loyal listeners, that's good new! As we have {data.episode.max()} episodes at the time of writing. It means that the average waiting time for a new episode is only {mean_time_between_episodes:.2f} days! That is more than {7/mean_time_between_episodes:.0f} episodes per week over the span of 2.5 years, wow!")
 ```
 
 It does probably help that Maarten and Tom can talk about pretty much anything, given that they are both a history and a current affairs podcast. However, releasing many episodes doesn't mean a lot if there is only little content in each episode. Now, I personally am very satisfied with amount of content released by Maarten and Tom, but perhaps we can quantify it? I wonder how much talking they actually do per episode? Let's find out in the next section!
@@ -364,11 +365,11 @@ def plot_wpe_over_time(data):
 plot_wpe_over_time(data.sort_values(by=["date", "episode"]))
 ```
 
-We see an interesting pattern. @fig-wpe_time shows us that the podcast started with a few long episodes per month, and slowly evolved into many shorter episodes per week. I belive that when Maarten and Tom started recording the podcast, they only did so on saturdays. Then they started spliting recordings into multiple episodes, and these days, they record multiple times a week. 
+We see an interesting pattern. @fig-wpe_time shows us that the podcast started with a few long episodes per month, and slowly evolved into many shorter episodes per week. I believe that when Maarten and Tom started recording the podcast, they only released one episode per week on saturdays. Then they started spliting recordings into multiple episodes, and these days, they record multiple times a week. 
 
 So the episodes became shorter, but also more frequent. The question is which of the two had a bigger effect? Are we getting less or more content each week?
 
-Before we answer that question, I would like to revisit our histogram, as @fig-wpe_time has given us some usefull information and how to filter our data to make a histogram
+Before we answer that question, I would like to revisit our histogram, as @fig-wpe_time has given us some usefull information on how to filter our data to make a histogram
 
 ### 'Doe maar (log)normaal...' -  Fitting statistical distributions to the histogram
 
@@ -496,10 +497,10 @@ print(f"Standard deviation = {round(np.sqrt(params[0]*params[2]**2), 2)}")
 With that out of the way, lets answer the question at hand: Are we getting less or more content each week?
 
 ### The evolution of content over time
-In @fig-wpe_time we looked at the content in each unique episode. But it might be more interesting to look at the content released over a set period of time, for example 'per week'. By doing this we can account for both the episodes becoming shorter and the episodes becoming more frequent. 
+To answer our question we need to look at the content released over a set period of time, in this analysis we will look 'per week'. By doing this we can account for both the length of individual episodes and the frequency of episodes.
 ```{python}
 #| label: fig-content_linear
-#| fig-cap: "There is a clear rising trend in the weekly data, as illustrated by the linear fit. The trend indicates that the amount of weekly content has been increasing with about 144 words per week."
+#| fig-cap: "There is a clear rising trend in the weekly data, as illustrated by the linear fit. The trend indicates that the amount of weekly content has been increasing with on average 144 words per week. One might notice that we could get a better fit by ommiting the first datapoint: first 3 episodes were all released on the same day, followed by a 3 month gap untill episode 4. Removing this first week and starting at episode 4 results in a slightly steeper slope of around 150 words-per-week."
 
 
 def plot_content_linear_fit(data):
@@ -711,7 +712,7 @@ It's not only a lot of fun that we have such an impressive amount of content, it
 1. Maarten has a very low and calming voice.
 3. There are hardly any distracting sounds or loud noises.
 3. Maarten and Tom have calm conversations.
-4. Maarten and talk with a consistent energy.
+4. Maarten and talk at a consistent rate.
 
 I feel like everybody would agree on these 4 points, but with the data I collected, we can attempt to verify points 3 and 4 with our data-driven approach.
 
@@ -787,10 +788,10 @@ This result suprised me. I expected the speech rate to fall nicely within this r
 
 In order to have some sense of a Dutch reference, I also processed the most popular Dutch podcast episode today as listed by Spotify: _"Geuze & Gorgels - season 2 episode 47 - Pretty Hurts"_. This episode has a speech rate of 207 WPM. As this single episode has a higher rate than all processed episodes for the _'Maarten van Rossem - De Podcast'_ podcast, I does give me confidence that Maarten and Tom really have a calm speech rate.
 
-Let's move on to our next hypothesis: 'Maarten and talk in a consistent ritme.', to see if we can elucidate this subject some more.
+Let's move on to our next hypothesis: 'Maarten and Tom talk at a consistent rate.', to see if we can elucidate this subject some more.
 
-## Maarten and Tom keep the talking rate very consistent throughout the episode
-analysing this is a bit more difficult to answer, but it is certainly possible. Luckily for us `Whisper` also creates subtitle files for each processed episode (.srt, .vtt). We can process these to devide the text of each episode into minutes, so we can estimate the speech rate per minute. 
+## Maarten and Tom keep their talking rate very consistent throughout the episode
+This talking rate hypothesis is a bit more difficult to answer, but it is certainly possible. Luckily for us `Whisper` also creates subtitle files for each processed episode (.srt, .vtt). We can process these to devide the text of each episode into minutes, so we can estimate the speech rate per minute. 
 By doing this, we can estimate the speech rate distribution per episode, and plot this result as ranges per episode:
 
 ```{python}
@@ -1139,7 +1140,7 @@ That's more like it! It appears that Maarten uses the word 'Natuurlijk' a lot. A
 ## Table of most common words
 While figures are always fine, it's also nice to look at the raw-data itself.
 ```{python}
-def get_top_n_words(data):
+def get_top_n_words(data, ngram_range=(1,3), minimum_rate=1, stopwords=dutch_stopwords):
     """
     List all words in the corpus that are used on average >= 1 time per episode.
 
@@ -1157,7 +1158,7 @@ def get_top_n_words(data):
     vec : sklearn.CountVectorizer
         CountVectorizer fitted to the corpus.
     """
-    vec = CountVectorizer(ngram_range=(1, 5), stop_words=dutch_stopwords).fit(
+    vec = CountVectorizer(ngram_range=ngram_range, stop_words=dutch_stopwords).fit(
         data["text"]
     )
     bag_of_words = vec.transform(data["text"])
@@ -1166,7 +1167,7 @@ def get_top_n_words(data):
     word_freq = sorted(word_freq, key=lambda x: x[1], reverse=True)
     word_freq = pd.DataFrame(word_freq, columns=("Token", "Count"))
     word_freq["Rate_per_Episode"] = round(word_freq["Count"] / data.shape[0], 2)
-    word_freq = word_freq[word_freq["Rate_per_Episode"] >= 1]
+    word_freq = word_freq[word_freq["Rate_per_Episode"] >= minimum_rate]
     return word_freq, bag_of_words, vec
 
 
@@ -1193,7 +1194,20 @@ word_freq.to_html(index=False)
 ```
 :::
 
-As we noted above, some interesting topics arouse. I wonder, would it be possible to track some interesting topics over time? For example, I can't image Maarten and Tom talked a lot about Ukraine before the war, so we should be able to pick this up in the data.
+```{python}
+# We do the same as above, but now for bigrams and above
+path_top_n_words_sub_senteces = "./cache/top_n_words_sub_senteces.pickle"
+if not os.path.exists(path_top_n_words_sub_senteces):
+    word_freq_sub_senteces, bag_of_words_sub_senteces, vectorizer_sub_senteces = get_top_n_words(data, ngram_range=(5,5), minimum_rate=0.001, stopwords=[])
+    package_sub_senteces = [word_freq_sub_senteces, bag_of_words_sub_senteces, vectorizer_sub_senteces]
+    write_pickle(path_top_n_words_sub_senteces, package_sub_senteces)
+else:
+    package_sub_senteces = read_pickle(path_top_n_words_sub_senteces)
+    word_freq_sub_senteces, bag_of_words_sub_senteces, vectorizer_sub_senteces = package_sub_senteces
+word_freq_sub_senteces.iloc[:21].to_html(index=False)
+```
+
+As we noted above, some interesting topics arose. I wonder, would it be possible to track some interesting topics over time? For example, I can't image Maarten and Tom talked a lot about Ukraine before the war, so we should be able to pick this up in the data.
 
 Let's attempt to track the use of "oekraïne" across episodes:
 ```{python}
@@ -1242,9 +1256,18 @@ So, we've demonstrated we can track news-worthy topics over time by mining our p
 # 'Kunt u mij horen?' - What is 'Maarten van Rossem - De Podcast' actually about? {#sec-topic}
 Within the field of machine learning, there is the field of 'topic modeling'. Topic modeling tries to automatically extract abstract the abstract concept of topics from a collection of documents, and then asigns one or more topics to each document. So given a selection of documents, such as transcribed podcast episodes, we can use these unsupervised machine learning techniques to extract common topics from the various episodes. 
 
-This part of the analysis was largely inspired by the wonderful work of [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic) and his `BERTopic` topic modeling pipeline.
+This part of the analysis was largely inspired by the wonderful work of [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic) and uses his `BERTopic` topic modeling pipeline. In short, the BERTopic algorithm works as follows:
 
-Getting a topic per episode is nice, but if there is one thing I know about this podcast, it is that it can wildly swing off topic at any moment. So instead of getting a topic per sentence, it would be more interesting to get a topic per episode. And since we already wrote some code to chop the .srt files into minutes, this is actualy quite easy to do! The relatively short chunk of code below performs all the steps for extracting our topics.
+1. Sentence transformer (Deep Neural Network - Transformer architecture):\
+We encode our documents into a 728 dimensional latent space that is able to capture the semantical and contextual meaning of text. Transformers are the type of neural networks that are responsible for the rapid development in Natural Language Processing in the last 8 years. 
+2.  Dimensionality reduction algorithm (UMAP):\ 
+High dimensional spaces such as the above are difficult to cluster due to the curse of dimensionality. We use a dimensionality reduction algorithm to reduce the number of dimensions to ~7. This algorithm tries to strike a balance between preserving local and global structure of the data. Such extreme dimensionality reduction means that we will lose information, but in exchange makes the data a lot more tractable for the clustering algorithm.
+3. Clustering algorithm (HDBSCAN):\
+This hiërarchical clustering algorithm takes the output of UMAP and calculates the distances between points using a metric that takes into account the density of the region the points are in. The algorithm then tries to select the most stable clusters. Thus, the documents are gathered into semantically similair clusters which represent what we will call topics.  
+4. Vectorizer C-TF-IDF:\
+Our documents are split into words (tokens) using a vectorizer. Then we apply a modified version of Term Frequency-Inverse Document Frequency to create human interpretable labels for the various topics. Words that appear often in a particular topic, but very little in other topics are most likely to be selected to represent a topic.
+
+So we can use this pipeline to transform our documents into embeddings, which are essentially vectors which are able to capture the semantic meaning of our documents, and apply a clustering algorithm to those to find our topic per document. In this case a document is how we split our data, for example per episode. Getting a topic per episode is nice, but if there is one thing I know about this podcast, it is that it can wildly swing off topic at any moment. So instead of getting a topic per sentence, it would be more interesting to get a topic per episode. And since we already wrote some code to chop the .srt files into minutes, this is actualy quite easy to do! The relatively short chunk of code below performs all the steps for extracting our topics.
 
 ```{python}
 # Sentencize the transcripts and track their titles
@@ -1277,16 +1300,17 @@ if not os.path.exists(model_path):
     # Define sub-models
     sentence_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
     vectorizer = CountVectorizer(stop_words=dutch_stopwords)
+    n_neighbors = 15
     umap_model = UMAP(
-        n_neighbors=15,  # Higher -> More global structure, less local
-        n_components=7,  # Effects clustering mostly, advice is to leave around ~5
+        n_neighbors=n_neighbors,  # Higher -> More global structure, less local
+        n_components=4,  # Effects clustering mostly, advice is to leave around ~5
         min_dist=0.0,
         metric="cosine",
-        random_state=random_seed + 1,
+        random_state=random_seed,
     )
 
     hdbscan_model = HDBSCAN(
-        min_cluster_size=15,  # Higher -> less clusters, bigger size
+        min_cluster_size=20,  # Higher -> less clusters, bigger size
         min_samples=4,  # Lower -> less outlier classifications, may be detrimental to quality topics.
         metric="euclidean",
         cluster_selection_method="eom",
@@ -1315,10 +1339,31 @@ Our model has tried to assigned each minute of the podcast, to a topic, excludin
 ```{python}
 topics = topic_model.get_topic_info()
 print(len(topics))
-topics[:16]
-# topics[1:11].to_html(index=False)
+topics[1:11].to_html(index=False)
 ```
 Amazing! We can see that the model was able to find clearly interpretable topics, and they make a lot of sense. Maarten and Tom have talked a lot about the Ukraine and Russia, as well as Dutch politics, the polics of the USA, Covid-19, the Netherlands. I'm realy impressed with how well this works.
+
+::: {.callout-caution}
+## How do you quantify what should be a topic?
+I'm very happy with the results of this algorithm. The topics found are very recognisable for the podcast and make sense. However, the distribution (counts) of the topics should be taken with a grain of salt. 
+
+Above I described the building blocks of our algorithm, and they all have a list of parameters to set:
+
+* Sentence transformer:\
+One needs to choose which pre-trained model to use, or trains a model themselves. Each model will generate different embeddings for our documents.
+*  Dimensionality reduction algorithm (UMAP):\ 
+    * n_neighbors: How many neighbours should be considered for the distance-density metric.
+    * n_components: How many dimensions should the output be.
+    * min_dist: How close are datapoints allowed to be to one another in the output embedding.
+    * metric: Which distance metric is used.
+    * random_state: Umap is a stochastic algorithm, training it twice with the same settings will give slightly different results. 
+* Clustering algorithm (HDBSCAN):\
+    * min_cluster_size: How many documents should a cluster have at the minimum.
+    * min_samples: How conservative should the clustering algorithm be.
+    * metric: Which distance metric to use for clustering.
+
+There are more parameters, but these are the main parameters to tune for our algorithm. Setting these can feel somewhat arbitrary. Changing just one of these parameters can have a big effect on the resulting clusters, and how to decide which parameter settings are better is not apparently obvious. With the settings used for this analysis "oekraïne_rusland_poetin_russen" is the most occuring topic. With different settings this topic was split into multiple topics: one for Poetin, one for the Nato, one for Crimea, etc. Splitting into these subcategories also means that none of these components is in the top 10 of detected topics. The reverse is also true, with the current settings some topics were split into sub-topics which would otherwise have a significantly higher count. In the end it is a personal preference which is better when it comes to such an abstract subject as what is part of a topic and what is not. I'm sure there are quantitative ways to explore this topic and to select which parameter setting leads to an optimal detection and allocation of topics, but that is outside of the scope of this project.
+:::
 
 ::: {.callout-note collapse="true"}
 ## Click here for all the topics identified by the model
@@ -1334,9 +1379,9 @@ To demonstrate this further, we can check some of the classified minutes for the
 ```{python}
 #| output: asis
 for topic_i in range(1, 4):
-    print(f"The topic is defined by:  {topics.iloc[topic_i]['Name']}" + "\n")
+    print(f"The topic is defined by:  **{topics.iloc[topic_i]['Name']}**" + "\n")
     example = " ".join(topic_model.get_representative_docs()[topic_i-1])
-    print(f"Representative minute of podcast:\n\n {example}" + "\n\n")
+    print(f"Representative minute of podcast:\n\n _{example}_" + "\n\n")
     print("----------------------------------------------------------\n\n")
 ```
 
@@ -1371,9 +1416,9 @@ topic_model.set_topic_labels(topic_labels)
 
 # Create reduced embeddings we can reuse for consistency
 reduced_embeddings_path = "./cache/reduced_embeddings.npy"
-if not os.path.exists(reduced_embeddings_path) or 1:
+if not os.path.exists(reduced_embeddings_path):
     umap_model_2d = UMAP(
-        n_neighbors=10,
+        n_neighbors=n_neighbors,
         n_components=2,
         min_dist=0.0,
         metric="cosine",
@@ -1393,7 +1438,7 @@ adjusted_docs = [
 ]
 
 # Visualize documents
-topic_model.visualize_documents(
+fig_visualize_documents = topic_model.visualize_documents(
     adjusted_docs,
     reduced_embeddings=reduced_embeddings,
     hide_annotations=False,
@@ -1402,6 +1447,7 @@ topic_model.visualize_documents(
     width=figsize[0],
     height=figsize[1],
 )
+fig_visualize_documents.show()
 ```
 
 There are some clear regions in the figure, such as:
@@ -1432,11 +1478,13 @@ Another interesting property we can investigate is how all the topics are relate
 #| column: page
 hierarchical_topics = topic_model.hierarchical_topics(docs)
 
-topic_model.visualize_hierarchy(
+fig_topic_hierarchy = topic_model.visualize_hierarchy(
     hierarchical_topics=hierarchical_topics, 
     width = figsize[0],
-    height = figsize[1]
+    height = figsize[1],
+    color_threshold = 1.4,
 )
+fig_topic_hierarchy.show()
 ```
 
 If you hover over the black circles, you will see the topic representation at that level of the hierarchy. These representations help you understand the effect of merging certain topics together. Some might be logical to merge whilst others might not. Moreover, we can now more clearly see which sub-topics can be found and how they are related in the larger scheme of things.
@@ -1445,24 +1493,28 @@ If you hover over the black circles, you will see the topic representation at th
 #| label: fig-topics_document_and_hierarchy
 #| fig-cap: "This figure combines the document topic visualization and the hierarchical visualization. This figure doesn't have a hover over as this add a lot to the filesize of this document."
 #| column: page 
-topic_model.visualize_hierarchical_documents(
+fig_hierarchical_documents = topic_model.visualize_hierarchical_documents(
     docs, 
     hierarchical_topics, 
     reduced_embeddings=reduced_embeddings,
+    hide_document_hover=True,
+    nr_levels = 5,
     width = figsize[0],
-    height = figsize[1]
+    height = figsize[1],
 )
+fig_hierarchical_documents.show()
 ```
 
-@fig-topics_document_and_hierarchy combines @fig-topics_documents and @fig-topics_hierarchy into a single figure. Showing us the what the hierarchical clustering looks like in the 2 dimensional representation.
+We see that @fig-topics_document_and_hierarchy combines @fig-topics_documents and @fig-topics_hierarchy into a single figure. Showing us the what the hierarchical clustering looks like in the 2 dimensional representation. By moving the slider we can further visualize the structure in the clustering algorithm. This reveals to us the general structure of topics as we identified ourselves in @fig-topics_documents.
 
-## How are the top 10 topics distributed over time?
+## The podcast really is an 'actualiteiten' podcast
+In the description of the podcast we may read: _'Maarten van Rossem en Tom Jessen geven hun kijk op het nieuws en de actualiteit.'_, which translates to: _'Maarten van Rossem and Tom Jessen share their point of view on the news and current affairs.'_.
+With our current techniques, we can easily check if this is true. We already saw some proof of this in @fig-over_time_oekraine, but with our current topic model we can go a lot further. We can plot our top 12 topics over time, and check their relative frequencies. If this really is a current affairs podcast, we should be able to see some clear patterns over time. 
 
 ```{python}
 #| column: page 
 #| label: fig-topic_per_week_over_time
 #| fig-cap: "The top 12 most occuring topics of the podcast as visualized over time. We can see several big events in the data, such as the presidential elections in the USA in 2020, the invasion of Ukraine in 2022, and the farmers protests in the summer of 2022."
-
 def topics_over_time_weeks(
     topic_model,
     docs: List[str],
@@ -1475,7 +1527,7 @@ def topics_over_time_weeks(
     """
     Create topics over time, aggregated to the bi-weekly level.
 
-    (Please note, this function is a direct addaptation of the sourcecode of BERTopic)
+    (Please note, this function is a direct adaptation of the sourcecode of BERTopic)
     To create the topics over time, BERTopic needs to be already fitted once.
     From the fitted models, the c-TF-IDF representations are calculate at
     each timestamp t. Then, the c-TF-IDF representations at timestamp t are
@@ -1531,13 +1583,14 @@ def topics_over_time_weeks(
     # Get timestamps for every week of the year
     bin_edges = []
     for year in years:
-        for week in range(1, 54, binsize):
+        for week in range(1, 55, binsize):
             date = f"{year}-{week}-1"
             date = pd.to_datetime(date, format="%Y-%W-%w")
             bin_edges.append(date)
     bin_edges = pd.DataFrame(bin_edges, columns=["bin_edges"])
+
     # remove year overflow at the end
-    bin_edges = bin_edges[bin_edges.bin_edges < end_year]
+#    bin_edges = bin_edges[bin_edges.bin_edges < end_year]
     # remove year overflow inbetween
     bin_edges = bin_edges.drop_duplicates()
 
@@ -1635,7 +1688,6 @@ def stacked_area_chart_topics(
     topics_over_time: pd.DataFrame,
     top_n_topics: int = 10,
     topics: List[int] = None,
-    normalize_frequency: bool = False,
     custom_labels: bool = False,
     width: int = figsize[0],
     height: int = figsize[1],
@@ -1643,7 +1695,7 @@ def stacked_area_chart_topics(
     """
     Visualize topics over time, normalized per timestep
 
-    (Please note, this function is a direct addaptation of the sourcecode of BERTopic)
+    (Please note, this function is a direct adaptation of the sourcecode of BERTopic)
     Arguments:
         topic_model: A fitted BERTopic instance.
         topics_over_time: The topics you would like to be visualized with the
@@ -1752,7 +1804,58 @@ binsize = 2
 topics_over_time = topics_over_time_weeks(
     topic_model, docs, timestamps, binsize=binsize
 )
-stacked_area_chart_topics(topic_model, topics_over_time, top_n_topics=12)
+fig_stacked_area_chart = stacked_area_chart_topics(topic_model, topics_over_time, top_n_topics=12)
+fig_stacked_area_chart.show()
 ```
 
-We end it here with @fig-topic_per_week_over_time #Todo finish
+As we can see in @fig-topic_per_week_over_time, many big events of the past years are visible in the topics covered in the podcast. We can identify the presidential elections of 2020, the invasion of Ukraine by Russia and the farmers protest of the summer of 2022. It is fair to say, yes, this really is a current affairs podcast.
+
+Now I was about to end this analysis at this point. But I was listening to the latest episode of the podcast (#330), and something happened that I could not just leave be. Maarten and Tom mentioned that they were not sure which topics they had covered in the past, and they mentioned that somebodies stagair could work this out manually for them. No need for that, I can give you the information right now!
+
+## What topic is each episode about? (Please don't let the stagair do this!)
+```{python}
+topic_names = {
+    key: topic_model.custom_labels_[key + topic_model._outliers]
+    for key, _ in topic_model.topic_labels_.items()
+}
+
+# Aggregate topic counts per episode
+topics_per_episode = pd.DataFrame({"Titles": titles, "Topics": topic_model.topics_})
+topics_per_episode["Episode"] = (
+    topics_per_episode["Titles"].str.findall("(?:#)(\d+)").str[0].astype(int)
+)
+
+topics_per_episode = topics_per_episode[topics_per_episode.Topics != -1]
+topics_per_episode["Topics"] = topics_per_episode.Topics.map(topic_names)
+topics_per_episode = (
+    topics_per_episode.groupby("Titles")
+    .agg(lambda x: x.value_counts().index[0:3])
+    .reset_index()
+)
+
+# Create final dataframe
+topics_per_episode[["Topic 1", "Topic 2", "Topic 3"]] = pd.DataFrame(
+    topics_per_episode["Topics"].to_list()
+).iloc[:, :3]
+topics_per_episode = (
+    topics_per_episode.sort_values("Episode")
+    .reset_index(drop=True)
+    .drop(columns=["Topics", "Episode"])
+)
+
+topics_per_episode.iloc[:10].to_html(index=False)
+```
+I just printed the result for the 10 first episodes, but you can click the tab below for an overview for the whole podcast.
+
+::: {.callout-note collapse="true"}
+## Click here to see the top 3 topics identified for all episodes
+```{python}
+#| echo: false
+topics_per_episode.to_html(index=False)
+```
+:::
+
+# What's next?
+If you've reached this point, congratulations! You've reached the end. With all this data there is a lot more we could do. We could do even more analysing of this data, or we could leverage it to try and build a Maarten chatbot for fun. If that were the case we should ask their permission first. Perhaps Maarten and Tom can tell us what they think of this project, and whether there is something they would like to see? 
+
+Thanks for reading, and see you next time!
