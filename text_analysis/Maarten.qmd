@@ -1,5 +1,5 @@
 ---
-title: "'Maarten van Rossem - De Podcast' - #330 Textanalysis of the podcast"
+title: "'Maarten van Rossem - De Podcast' - #331 Textanalysis of the podcast"
 author: "Alex van Vorstenbosch"
 date: today
 abstract: "De 'Maarten van Rossem'-podcast is one of the most popular podcasts in The Netherlands, which has produced more than 300 episodes in the past 2 years. In this article, we produce some fun, and hopefully interesting, statistics about the podcast. This is done by collecting all the currently available podcasts from the web, and transcribing them using the newly available `Whisper` automated speech recognition model by [OpenAI](https://github.com/openai/whisper). After some initial statistical analysis of the podcast, finish our analysis by extracting topics from podcast using `BERTopic`, a Topic Modeling pipeline by [Maarten Grootendorst](https://github.com/MaartenGr/BERTopic). The goal of this project is first of all to have fun analysing the words of Maarten and Tom. I hope you'll learn something interesting from all this, enjoy!"
@@ -1194,19 +1194,6 @@ word_freq.to_html(index=False)
 ```
 :::
 
-```{python}
-# We do the same as above, but now for bigrams and above
-path_top_n_words_sub_senteces = "./cache/top_n_words_sub_senteces.pickle"
-if not os.path.exists(path_top_n_words_sub_senteces):
-    word_freq_sub_senteces, bag_of_words_sub_senteces, vectorizer_sub_senteces = get_top_n_words(data, ngram_range=(5,5), minimum_rate=0.001, stopwords=[])
-    package_sub_senteces = [word_freq_sub_senteces, bag_of_words_sub_senteces, vectorizer_sub_senteces]
-    write_pickle(path_top_n_words_sub_senteces, package_sub_senteces)
-else:
-    package_sub_senteces = read_pickle(path_top_n_words_sub_senteces)
-    word_freq_sub_senteces, bag_of_words_sub_senteces, vectorizer_sub_senteces = package_sub_senteces
-word_freq_sub_senteces.iloc[:21].to_html(index=False)
-```
-
 As we noted above, some interesting topics arose. I wonder, would it be possible to track some interesting topics over time? For example, I can't image Maarten and Tom talked a lot about Ukraine before the war, so we should be able to pick this up in the data.
 
 Let's attempt to track the use of "oekraïne" across episodes:
@@ -1491,7 +1478,7 @@ If you hover over the black circles, you will see the topic representation at th
 
 ```{python}
 #| label: fig-topics_document_and_hierarchy
-#| fig-cap: "This figure combines the document topic visualization and the hierarchical visualization. This figure doesn't have a hover over as this add a lot to the filesize of this document."
+#| fig-cap: "This figure combines the document topic visualization and the hierarchical visualization. This figure doesn't have a hover over as this add a lot to the filesize of this document. This figure currently has a bug and doesn't appear to work in Chrome, but it does work in some other browsers."
 #| column: page 
 fig_hierarchical_documents = topic_model.visualize_hierarchical_documents(
     docs, 
@@ -1799,7 +1786,7 @@ def stacked_area_chart_topics(
     )
     return fig
 
-
+plt.close() # This is here as it sometimes helps with the bug mentioned above
 binsize = 2
 topics_over_time = topics_over_time_weeks(
     topic_model, docs, timestamps, binsize=binsize
