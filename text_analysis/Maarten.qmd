@@ -1464,7 +1464,7 @@ Another interesting property we can investigate is how all the topics are relate
 #| fig-cap: "This cluster hierarchy plot visualizes how the various topics are related. The shorter you have to travel to the right before topics merge, the closer related they are according to the model."
 #| column: page
 
-hierarchical_topics = topic_model.hierarchical_topics(docs)close
+hierarchical_topics = topic_model.hierarchical_topics(docs)
 
 fig_topic_hierarchy = topic_model.visualize_hierarchy(
     hierarchical_topics=hierarchical_topics, 
