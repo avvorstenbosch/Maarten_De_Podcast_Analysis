@@ -8,12 +8,12 @@ highlight-style: arrow
 format:
   html:
     colorlinks: true
-    embed-resources: true
     number-sections: true
     theme:
       light: default
       dark: darkly
     smooth-scroll: true
+    standalone: true
     toc: true
     toc-title: Table of Contents
 code-overflow: wrap
@@ -197,7 +197,7 @@ is_ep = (data.is_episode==True)
 data[~is_ep][print_cols].to_html(index=False)
 ```
 
-For our analysis, it is better to ignore these specials, as they are not representative for typical podcast episodes. 
+These episodes are given the number -9999 to indicate that they are not regular numbered episoded. For our analysis, it is better to ignore these specials, as they are not representative for typical podcast episodes. 
 
 ```{python}
 #| output: asis
@@ -1459,11 +1459,12 @@ So this has also given us a pretty nice overview of the main topics of the podca
 
 Another interesting property we can investigate is how all the topics are related in a hierarchical sense. Once again we can see quite some logical patterns popping up along the way:
 
-```{python}
+```{python hierarchical_topics}
 #| label: fig-topics_hierarchy
 #| fig-cap: "This cluster hierarchy plot visualizes how the various topics are related. The shorter you have to travel to the right before topics merge, the closer related they are according to the model."
 #| column: page
-hierarchical_topics = topic_model.hierarchical_topics(docs)
+
+hierarchical_topics = topic_model.hierarchical_topics(docs)close
 
 fig_topic_hierarchy = topic_model.visualize_hierarchy(
     hierarchical_topics=hierarchical_topics, 
@@ -1476,10 +1477,11 @@ fig_topic_hierarchy.show()
 
 If you hover over the black circles, you will see the topic representation at that level of the hierarchy. These representations help you understand the effect of merging certain topics together. Some might be logical to merge whilst others might not. Moreover, we can now more clearly see which sub-topics can be found and how they are related in the larger scheme of things.
 
-```{python}
+```{python hierarchical_documents}
 #| label: fig-topics_document_and_hierarchy
-#| fig-cap: "This figure combines the document topic visualization and the hierarchical visualization. This figure doesn't have a hover over as this add a lot to the filesize of this document. This figure currently has a bug and doesn't appear to work in Chrome, but it does work in some other browsers."
+#| fig-cap: "This figure combines the document topic visualization and the hierarchical visualization. This figure doesn't have a hover over as this add a lot to the filesize of this document."
 #| column: page 
+
 fig_hierarchical_documents = topic_model.visualize_hierarchical_documents(
     docs, 
     hierarchical_topics, 
@@ -1489,6 +1491,7 @@ fig_hierarchical_documents = topic_model.visualize_hierarchical_documents(
     width = figsize[0],
     height = figsize[1],
 )
+
 fig_hierarchical_documents.show()
 ```
 
@@ -1498,7 +1501,7 @@ We see that @fig-topics_document_and_hierarchy combines @fig-topics_documents an
 In the description of the podcast we may read: _'Maarten van Rossem en Tom Jessen geven hun kijk op het nieuws en de actualiteit.'_, which translates to: _'Maarten van Rossem and Tom Jessen share their point of view on the news and current affairs.'_.
 With our current techniques, we can easily check if this is true. We already saw some proof of this in @fig-over_time_oekraine, but with our current topic model we can go a lot further. We can plot our top 12 topics over time, and check their relative frequencies. If this really is a current affairs podcast, we should be able to see some clear patterns over time. 
 
-```{python}
+```{python topics_over_time}
 #| column: page 
 #| label: fig-topic_per_week_over_time
 #| fig-cap: "The top 12 most occuring topics of the podcast as visualized over time. We can see several big events in the data, such as the presidential elections in the USA in 2020, the invasion of Ukraine in 2022, and the farmers protests in the summer of 2022."
@@ -1786,11 +1789,11 @@ def stacked_area_chart_topics(
     )
     return fig
 
-plt.close() # This is here as it sometimes helps with the bug mentioned above
 binsize = 2
 topics_over_time = topics_over_time_weeks(
     topic_model, docs, timestamps, binsize=binsize
 )
+
 fig_stacked_area_chart = stacked_area_chart_topics(topic_model, topics_over_time, top_n_topics=12)
 fig_stacked_area_chart.show()
 ```
