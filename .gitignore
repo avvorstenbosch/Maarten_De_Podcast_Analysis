@@ -139,7 +139,7 @@ dependencies/
 
 # ignore intermediate outputs
 text_analysis/*.html
-
+text_analysis/Maarten_files*
 # ignore pickle data
 *.pickle
 
